@@ -1,0 +1,238 @@
+---
+title: "NomadForms Demo Survey"
+format: 
+  html:
+    css: ../../survey-runtime/inst/www/nomadforms.css
+    theme: none
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+# Add parent directory to library path to load nomadforms package
+.libPaths(c("../../survey-runtime", .libPaths()))
+suppressPackageStartupMessages({
+  library(shiny)
+  library(htmltools)
+})
+
+# Source the R files directly for development
+source("../../survey-runtime/R/database.R")
+source("../../survey-runtime/R/questions.R")
+```
+
+::: {.survey-header}
+# Welcome to NomadForms Demo
+
+Experience our mobile-first survey platform. This demo works on phones, tablets, and desktops.
+:::
+
+::: {.container}
+
+## 📱 Personal Information
+
+::: {.form-group}
+```{r}
+nf_question(
+  "name", 
+  "text", 
+  "What is your full name?", 
+  required = TRUE,
+  help_text = "Please enter your first and last name"
+)
+```
+:::
+
+::: {.form-group}
+```{r}
+nf_question(
+  "age", 
+  "numeric", 
+  "How old are you?", 
+  min = 0, 
+  max = 120, 
+  required = TRUE,
+  help_text = "Enter your age in years"
+)
+```
+:::
+
+::: {.form-group}
+```{r}
+nf_question(
+  "gender", 
+  "radio", 
+  "What is your gender?",
+  choices = c("Male", "Female", "Other", "Prefer not to say"),
+  required = TRUE
+)
+```
+:::
+
+## 🌍 Location
+
+::: {.form-group}
+```{r}
+nf_question(
+  "country",
+  "select",
+  "Which country are you from?",
+  choices = c(
+    "Kenya", "Uganda", "Tanzania", "Rwanda", 
+    "Ethiopia", "South Sudan", "Other"
+  ),
+  required = TRUE
+)
+```
+:::
+
+::: {.form-group}
+```{r}
+nf_question(
+  "residence",
+  "radio",
+  "Where do you live?",
+  choices = c("Urban", "Rural", "Semi-urban"),
+  required = TRUE
+)
+```
+:::
+
+## 📊 Feedback
+
+::: {.form-group}
+```{r}
+nf_question(
+  "experience",
+  "slider",
+  "How would you rate your experience with mobile surveys?",
+  min = 1,
+  max = 10,
+  help_text = "1 = No experience, 10 = Very experienced"
+)
+```
+:::
+
+::: {.form-group}
+```{r}
+nf_question(
+  "features",
+  "checkbox",
+  "Which features are important to you? (Select all that apply)",
+  choices = c(
+    "Offline capability",
+    "Mobile-friendly interface",
+    "Multi-language support",
+    "Data export options",
+    "Easy to use"
+  )
+)
+```
+:::
+
+::: {.form-group}
+```{r}
+nf_question(
+  "comments",
+  "text",
+  "Any additional comments or suggestions?",
+  help_text = "Optional: Share your thoughts"
+)
+```
+:::
+
+## ✅ Submit
+
+```{r}
+div(
+  style = "margin-top: 2rem;",
+  actionButton(
+    "submit", 
+    "Submit Survey",
+    class = "btn btn-primary",
+    icon = icon("paper-plane")
+  )
+)
+```
+
+```{r}
+#| context: server
+
+# Generate session ID
+session_id <- paste0("demo_", format(Sys.time(), "%Y%m%d_%H%M%S"))
+
+# Handle form submission
+observeEvent(input$submit, {
+  
+  # Validate required fields
+  validations <- list(
+    name = nf_validate(input$name, required = TRUE, type = "text"),
+    age = nf_validate(input$age, required = TRUE, type = "numeric", min = 0, max = 120),
+    gender = nf_validate(input$gender, required = TRUE, type = "radio"),
+    country = nf_validate(input$country, required = TRUE, type = "select"),
+    residence = nf_validate(input$residence, required = TRUE, type = "radio")
+  )
+  
+  # Check for validation errors
+  errors <- sapply(validations, function(v) !v$valid)
+  
+  if (any(errors)) {
+    error_fields <- names(errors)[errors]
+    error_messages <- sapply(validations[errors], function(v) v$message)
+    
+    showNotification(
+      paste("Please fix the following:", paste(error_messages, collapse = ", ")),
+      type = "error",
+      duration = 5
+    )
+    return()
+  }
+  
+  # Collect responses
+  responses <- list(
+    session_id = session_id,
+    name = input$name,
+    age = input$age,
+    gender = input$gender,
+    country = input$country,
+    residence = input$residence,
+    experience = input$experience,
+    features = paste(input$features, collapse = ", "),
+    comments = input$comments,
+    submitted_at = Sys.time()
+  )
+  
+  # In a real app, you would save to database here:
+  # conn <- nf_database(connection_string = Sys.getenv("DATABASE_URL"))
+  # nf_save_response(conn, project_id, session_id, ...)
+  
+  # For demo, just show success message
+  showNotification(
+    HTML(paste0(
+      "<strong>Success!</strong><br>",
+      "Survey submitted successfully!<br>",
+      "Session ID: ", session_id
+    )),
+    type = "message",
+    duration = 10
+  )
+  
+  # Log to console for testing
+  cat("\n=== Survey Response ===\n")
+  print(responses)
+  cat("=====================\n\n")
+})
+```
+
+:::
+
+---
+
+<div style="text-align: center; color: #6b7280; padding: 2rem 0;">
+  <p>Powered by <strong>NomadForms</strong> 📱🌍</p>
+  <p><em>Mobile-first surveys for researchers on the move</em></p>
+</div>
+```
+
