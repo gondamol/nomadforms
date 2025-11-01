@@ -7,6 +7,8 @@ format:
 server: shiny
 ---
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
 ```{r}
 #| context: setup
 #| include: false
@@ -21,17 +23,41 @@ suppressPackageStartupMessages({
 # Source the R files directly for development
 source("../../survey-runtime/R/database.R")
 source("../../survey-runtime/R/questions.R")
+source("../../survey-runtime/R/storage.R")
+
+# Load shinyjs for JavaScript interactions
+library(shinyjs)
 ```
 
 ::: {.survey-header}
-# Welcome to NomadForms Demo
+# <i class="fas fa-mobile-alt"></i> Welcome to NomadForms Demo
 
 Experience our mobile-first survey platform. This demo works on phones, tablets, and desktops.
 :::
 
 ::: {.container}
 
-## 📱 Personal Information
+```{r}
+# Progress indicator
+div(
+  class = "progress-bar",
+  div(
+    class = "progress-fill",
+    id = "survey-progress",
+    style = "width: 0%;"
+  )
+)
+```
+
+::: {#connection-status style="text-align: center; padding: 0.5rem; margin-bottom: 1rem; border-radius: 0.5rem; background: #f0fdf4; color: #166534; display: none;"}
+<i class="fas fa-wifi"></i> Connected - Responses will be saved
+:::
+
+::: {#offline-status style="text-align: center; padding: 0.5rem; margin-bottom: 1rem; border-radius: 0.5rem; background: #fef3c7; color: #92400e; display: none;"}
+<i class="fas fa-wifi-slash"></i> Offline - Responses saved locally
+:::
+
+## <i class="fas fa-user-circle"></i> Personal Information
 
 ::: {.form-group}
 ```{r}
@@ -71,7 +97,7 @@ nf_question(
 ```
 :::
 
-## 🌍 Location
+## <i class="fas fa-map-marker-alt"></i> Location
 
 ::: {.form-group}
 ```{r}
@@ -100,7 +126,7 @@ nf_question(
 ```
 :::
 
-## 📊 Feedback
+## <i class="fas fa-chart-line"></i> Feedback
 
 ::: {.form-group}
 ```{r}
@@ -143,16 +169,20 @@ nf_question(
 ```
 :::
 
-## ✅ Submit
+## <i class="fas fa-check-circle"></i> Submit
 
 ```{r}
 div(
-  style = "margin-top: 2rem;",
+  style = "margin-top: 2rem; display: flex; gap: 1rem;",
   actionButton(
     "submit", 
-    "Submit Survey",
-    class = "btn btn-primary",
-    icon = icon("paper-plane")
+    HTML('<i class="fas fa-paper-plane"></i> Submit Survey'),
+    class = "btn btn-primary"
+  ),
+  actionButton(
+    "save_draft",
+    HTML('<i class="fas fa-save"></i> Save Draft'),
+    class = "btn btn-secondary"
   )
 )
 ```
@@ -162,6 +192,87 @@ div(
 
 # Generate session ID
 session_id <- paste0("demo_", format(Sys.time(), "%Y%m%d_%H%M%S"))
+project_id <- "demo-project-001"
+
+# Update progress indicator
+observe({
+  # Calculate progress based on filled fields
+  total_fields <- 8
+  filled_fields <- sum(c(
+    !is.null(input$name) && input$name != "",
+    !is.null(input$age) && !is.na(input$age),
+    !is.null(input$gender) && input$gender != "",
+    !is.null(input$country) && input$country != "",
+    !is.null(input$residence) && input$residence != "",
+    !is.null(input$experience),
+    !is.null(input$features) && length(input$features) > 0,
+    !is.null(input$comments) && input$comments != ""
+  ))
+  
+  progress <- round((filled_fields / total_fields) * 100)
+  
+  runjs(paste0("
+    document.getElementById('survey-progress').style.width = '", progress, "%';
+  "))
+})
+
+# Check connection status
+observe({
+  tryCatch({
+    # Try to check if database is available
+    conn_string <- Sys.getenv("DATABASE_URL", "")
+    if (conn_string != "") {
+      runjs("
+        document.getElementById('connection-status').style.display = 'block';
+        document.getElementById('offline-status').style.display = 'none';
+      ")
+    } else {
+      runjs("
+        document.getElementById('connection-status').style.display = 'none';
+        document.getElementById('offline-status').style.display = 'block';
+      ")
+    }
+  }, error = function(e) {
+    runjs("
+      document.getElementById('connection-status').style.display = 'none';
+      document.getElementById('offline-status').style.display = 'block';
+    ")
+  })
+})
+
+# Handle save draft
+observeEvent(input$save_draft, {
+  # Collect current responses
+  draft_data <- list(
+    session_id = session_id,
+    name = input$name,
+    age = input$age,
+    gender = input$gender,
+    country = input$country,
+    residence = input$residence,
+    experience = input$experience,
+    features = paste(input$features, collapse = ", "),
+    comments = input$comments,
+    saved_at = Sys.time(),
+    status = "draft"
+  )
+  
+  # Save to local storage (browser)
+  runjs(paste0("
+    localStorage.setItem('nomadforms_draft_", session_id, "', '", 
+    jsonlite::toJSON(draft_data, auto_unbox = TRUE), "');
+  "))
+  
+  showNotification(
+    HTML('<i class="fas fa-save"></i> Draft saved locally!'),
+    type = "message",
+    duration = 3
+  )
+  
+  cat("\n=== Draft Saved ===\n")
+  print(draft_data)
+  cat("==================\n\n")
+})
 
 # Handle form submission
 observeEvent(input$submit, {
