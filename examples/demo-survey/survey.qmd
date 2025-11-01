@@ -8,6 +8,13 @@ server: shiny
 ---
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<link rel="manifest" href="../../survey-runtime/inst/www/manifest.json" />
+<meta name="theme-color" content="#007bff" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+<script src="../../survey-runtime/inst/www/indexeddb.js"></script>
+<script src="install-pwa.js"></script>
 
 ```{r}
 #| context: setup
