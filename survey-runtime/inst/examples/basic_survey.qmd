@@ -1,0 +1,60 @@
+---
+title: "Basic NomadForms Survey"
+format: html
+server: shiny
+---
+
+```{r}
+#| context: setup
+library(nomadforms)
+```
+
+# Welcome to NomadForms
+
+This is a basic survey example demonstrating NomadForms capabilities.
+
+## Demographics
+
+```{r}
+nf_question("name", "text", "What is your name?", required = TRUE)
+nf_question("age", "numeric", "How old are you?", min = 0, max = 120, required = TRUE)
+nf_question("gender", "radio", "What is your gender?", 
+            choices = c("Male", "Female", "Other", "Prefer not to say"))
+```
+
+## Feedback
+
+```{r}
+nf_question("experience", "slider", "Rate your experience", min = 1, max = 10)
+nf_question("comments", "text", "Any additional comments?")
+```
+
+```{r}
+shiny::actionButton("submit", "Submit Survey", class = "btn-primary")
+```
+
+```{r}
+#| context: server
+
+# Handle survey submission
+shiny::observeEvent(input$submit, {
+  # Validate required fields
+  name_valid <- nf_validate(input$name, required = TRUE)
+  age_valid <- nf_validate(input$age, required = TRUE, type = "numeric")
+  
+  if (!name_valid$valid) {
+    shiny::showNotification(name_valid$message, type = "error")
+    return()
+  }
+  
+  if (!age_valid$valid) {
+    shiny::showNotification(age_valid$message, type = "error")
+    return()
+  }
+  
+  # TODO: Save responses to database
+  # For now, just show confirmation
+  shiny::showNotification("Survey submitted successfully!", type = "message")
+})
+```
+

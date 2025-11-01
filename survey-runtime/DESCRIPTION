@@ -1,0 +1,33 @@
+Package: nomadforms
+Type: Package
+Title: Offline-Capable Survey Platform for Field Research
+Version: 0.1.0
+Authors@R: c(
+    person("Your", "Name", email = "your.email@example.com", role = c("aut", "cre"))
+    )
+Description: An open-source, offline-capable survey data collection platform
+    built on surveydown for field research in Low and Middle Income Countries.
+    Provides visual survey builder, REDCap codebook import, mobile optimization,
+    and rich data exports (Stata, SPSS, R).
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends:
+    R (>= 4.0.0)
+Imports:
+    shiny (>= 1.7.0),
+    quarto (>= 1.3),
+    DBI,
+    RPostgres,
+    jsonlite,
+    htmltools,
+    shinyjs
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+RoxygenNote: 7.2.0
+VignetteBuilder: knitr
+URL: https://github.com/gondamol/nomadforms
+BugReports: https://github.com/gondamol/nomadforms/issues
+
