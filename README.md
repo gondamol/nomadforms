@@ -65,9 +65,41 @@ Visual Builder (React) → Generates Code (Quarto + R)
 **Mobile**: Progressive Web App (PWA)  
 **Database**: PostgreSQL (Supabase or self-hosted)
 
-## 📦 Installation
+## 📦 Quick Start
 
-_Coming soon - project is in active development_
+### Try the Demo (5 minutes)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/gondamol/nomadforms.git
+cd nomadforms
+
+# 2. Install R packages
+R -e 'install.packages(c("shiny", "DBI", "RPostgres", "jsonlite", "htmltools"))'
+
+# 3. Run the demo
+cd examples/demo-survey
+quarto preview survey.qmd
+```
+
+**See**: `TESTING.md` for detailed testing instructions including mobile testing.
+
+### Current Features (Phase 1 - 40% Complete)
+
+✅ **Working Now**:
+- 7 question types (text, numeric, radio, checkbox, select, slider, textarea)
+- Mobile-responsive design (works on phones, tablets, desktops)
+- Touch-optimized controls (44px minimum touch targets)
+- Field validation (required fields, ranges, types)
+- Success/error notifications
+- Session tracking
+
+⏸️ **Coming Soon**:
+- Database persistence (PostgreSQL/Supabase)
+- Offline capability (PWA + IndexedDB)
+- Visual survey builder
+- REDCap codebook import
+- Data export (Stata, SPSS, R)
 
 ## 🤝 Contributing
 
