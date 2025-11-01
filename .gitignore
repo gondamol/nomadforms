@@ -1,0 +1,74 @@
+# OpenSpec - Project management files (not product code)
+openspec/
+.cursor/
+
+# Analysis and planning documents (keep local only)
+SURVEYDOWN_ANALYSIS.md
+NEXT_STEPS.md
+REBRANDING_SUMMARY.md
+AGENTS.md
+
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Shiny
+rsconnect/
+shinyapps/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Dependencies
+package-lock.json
+yarn.lock
+
