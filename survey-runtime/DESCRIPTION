@@ -3,7 +3,7 @@ Type: Package
 Title: Offline-Capable Survey Platform for Field Research
 Version: 0.1.0
 Authors@R: c(
-    person("Your", "Name", email = "your.email@example.com", role = c("aut", "cre"))
+    person("Nichodemus", "Amollo", email = "nichodemuswerre@gmail.com", role = c("aut", "cre"))
     )
 Description: An open-source, offline-capable survey data collection platform
     built on surveydown for field research in Low and Middle Income Countries.
