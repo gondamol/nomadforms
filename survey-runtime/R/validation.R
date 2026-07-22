@@ -94,9 +94,9 @@ nf_validate <- function(value, rules = list(), question_label = "This field") {
   }
   
   # In list validation
-  if (!is.null(rules$in)) {
-    if (!all(value %in% rules$in)) {
-      errors <- c(errors, paste(question_label, "must be one of:", paste(rules$in, collapse = ", ")))
+  if (!is.null(rules$`in`)) {
+    if (!all(value %in% rules$`in`)) {
+      errors <- c(errors, paste(question_label, "must be one of:", paste(rules$`in`, collapse = ", ")))
     }
   }
   
