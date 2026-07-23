@@ -169,6 +169,27 @@ function(req, res) {
   }), error = function(e) { res$status <- 500; list(success = FALSE, error = e$message) })
 }
 
+#* Update a survey's title, description and question definitions
+#* @param survey_id Survey UUID
+#* @serializer unboxedJSON
+#* @put /api/surveys/<survey_id>
+function(survey_id, req, res) {
+  tryCatch(with_db(function(conn) {
+    body <- jsonlite::fromJSON(req$postBody, simplifyVector = TRUE)
+    if (is.null(body$title) || nchar(body$title) == 0) {
+      res$status <- 400; return(list(success = FALSE, error = "title is required"))
+    }
+    codebook <- if (!is.null(body$questions))
+      jsonlite::toJSON(body$questions, auto_unbox = TRUE) else "[]"
+    n <- DBI::dbExecute(conn, "
+      UPDATE projects SET name = $1, description = $2, codebook = $3::jsonb, updated_at = NOW()
+      WHERE id = $4",
+      params = list(body$title, body$description %||% "", codebook, survey_id))
+    if (n == 0) { res$status <- 404; return(list(success = FALSE, error = "Survey not found")) }
+    list(success = TRUE, message = "Survey updated", data = list(survey_id = survey_id))
+  }), error = function(e) { res$status <- 500; list(success = FALSE, error = e$message) })
+}
+
 # --- Submissions -----------------------------------------------------------
 
 # Shared insert used by both the single-submit and batch-sync endpoints.

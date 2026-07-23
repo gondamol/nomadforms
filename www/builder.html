@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f766e">
+  <title>NomadForms — Survey Builder</title>
+  <style>
+    :root { --brand:#0f766e; --brand-d:#0b5850; --bg:#f4f6f8; --card:#fff;
+            --ink:#1a2430; --muted:#5b6673; --line:#dfe4e9; --err:#b91c1c; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+           color:var(--ink); background:var(--bg); }
+    header { position:sticky; top:0; z-index:20; background:var(--brand); color:#fff;
+             padding:12px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    header h1 { margin:0; font-size:1.05rem; font-weight:600; flex:1; }
+    header a { color:#d7f0ec; text-decoration:none; font-size:.85rem; }
+    button { font:inherit; font-weight:600; border:0; border-radius:9px; padding:9px 14px;
+             cursor:pointer; min-height:40px; }
+    .btn-pri { background:#fff; color:var(--brand-d); }
+    .btn-ghost { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.5); }
+    .wrap { max-width:1100px; margin:0 auto; padding:16px; display:grid;
+            grid-template-columns: 200px 1fr 340px; gap:16px; align-items:start; }
+    @media (max-width:900px){ .wrap{ grid-template-columns:1fr; } .preview{ position:static; } }
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+    .panel h2 { margin:0 0 10px; font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+    .palette button { display:block; width:100%; text-align:left; background:#f0fdfa; color:var(--brand-d);
+                      border:1px solid #cdeae6; margin-bottom:6px; font-weight:500; }
+    .palette button:hover { background:#dff5f1; }
+    .meta input { width:100%; min-height:40px; padding:8px 10px; border:1px solid var(--line);
+                  border-radius:8px; font:inherit; margin-bottom:8px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+            padding:12px; margin-bottom:10px; cursor:grab; }
+    .card.dragging { opacity:.5; } .card.over { border-color:var(--brand); box-shadow:0 0 0 2px #cdeae6; }
+    .card-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .drag { color:var(--muted); cursor:grab; user-select:none; }
+    .badge { font-size:.7rem; background:#eef2f5; color:var(--muted); border-radius:20px; padding:2px 8px; }
+    .card label { display:block; font-size:.72rem; color:var(--muted); margin:6px 0 2px; }
+    .card input[type=text], .card select { width:100%; min-height:38px; padding:7px 9px;
+            border:1px solid var(--line); border-radius:7px; font:inherit; }
+    .row { display:flex; gap:8px; } .row > * { flex:1; }
+    .card-actions { display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+    .chk { display:flex; align-items:center; gap:6px; font-size:.85rem; color:var(--ink); }
+    .chk input { width:18px; height:18px; }
+    .del { background:transparent; color:var(--err); border:1px solid #f0caca; padding:6px 10px; font-size:.8rem; }
+    .opts textarea { width:100%; min-height:60px; padding:7px 9px; border:1px solid var(--line);
+                     border-radius:7px; font:inherit; resize:vertical; }
+    .preview { position:sticky; top:72px; }
+    .pv-field { border:1px solid var(--line); border-radius:9px; padding:10px 12px; margin-bottom:8px; background:#fbfcfd; }
+    .pv-field .q { font-weight:600; font-size:.9rem; margin-bottom:5px; }
+    .pv-field .req { color:var(--err); }
+    .pv-field input, .pv-field select { width:100%; min-height:36px; padding:6px 8px;
+            border:1px solid var(--line); border-radius:6px; font:inherit; background:#fff; }
+    .pv-note { background:#f0fdfa; border-color:#99f6e4; color:#134e4a; font-size:.85rem; }
+    .empty { color:var(--muted); text-align:center; padding:32px 12px; font-size:.9rem; }
+    #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink);
+             color:#fff; padding:11px 18px; border-radius:9px; opacity:0; transition:.2s; pointer-events:none; z-index:30; }
+    #toast.show { opacity:1; } #toast.ok{ background:#15803d; } #toast.err{ background:var(--err); }
+    .hint { font-size:.72rem; color:var(--muted); margin-top:2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Survey Builder</h1>
+    <a href="index.html">← Surveys</a>
+    <button class="btn-ghost" id="preview-json">View JSON</button>
+    <button class="btn-pri" id="save-btn">Save survey</button>
+  </header>
+
+  <div class="wrap">
+    <aside class="panel palette">
+      <h2>Add question</h2>
+      <div id="palette"></div>
+    </aside>
+
+    <main>
+      <div class="panel meta" style="margin-bottom:16px">
+        <h2>Survey details</h2>
+        <input id="survey-title" placeholder="Survey title (e.g. Household Nutrition)">
+        <input id="survey-desc" placeholder="Short description (optional)">
+      </div>
+      <div id="questions"></div>
+      <div class="empty panel" id="empty-hint">Add questions from the left palette. Drag cards to reorder.</div>
+    </main>
+
+    <aside class="panel preview">
+      <h2>Live preview</h2>
+      <div id="preview"></div>
+    </aside>
+  </div>
+  <div id="toast"></div>
+
+  <script>
+  const params = new URLSearchParams(location.search);
+  const API = (params.get('api') || '').replace(/\/$/, '') || location.origin;
+  const EDIT_ID = params.get('survey'); // if present, we're editing
+
+  // Question types offered in the palette. `opts` = has an options list.
+  const TYPES = [
+    { t:'text',         label:'Text' },
+    { t:'textarea',     label:'Long text' },
+    { t:'integer',      label:'Integer' },
+    { t:'decimal',      label:'Decimal' },
+    { t:'email',        label:'Email' },
+    { t:'phone',        label:'Phone' },
+    { t:'date',         label:'Date' },
+    { t:'time',         label:'Time' },
+    { t:'select',       label:'Dropdown', opts:true },
+    { t:'radio',        label:'Single choice', opts:true },
+    { t:'multi_select', label:'Multiple choice', opts:true },
+    { t:'yes_no',       label:'Yes / No' },
+    { t:'gps',          label:'GPS location' },
+    { t:'note',         label:'Note / instruction' },
+  ];
+  const TYPE_META = Object.fromEntries(TYPES.map(x => [x.t, x]));
+
+  let questions = []; // [{uid, id, type, label, required, hint, options[]}]
+  let uidSeq = 1;
+
+  // ---- Palette ------------------------------------------------------------
+  const paletteEl = document.getElementById('palette');
+  TYPES.forEach(x => {
+    const b = document.createElement('button');
+    b.textContent = '+ ' + x.label;
+    b.onclick = () => addQuestion(x.t);
+    paletteEl.appendChild(b);
+  });
+
+  function slug(s) {
+    return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40);
+  }
+  function uniqueId(base) {
+    let id = base || 'q', n = 1;
+    const taken = new Set(questions.map(q => q.id));
+    let cand = id;
+    while (taken.has(cand)) cand = id + '_' + (++n);
+    return cand;
+  }
+
+  function addQuestion(type) {
+    const meta = TYPE_META[type];
+    const q = { uid: uidSeq++, type, id: uniqueId(type), label: '',
+                required: false, hint: '', options: meta.opts ? ['Option 1', 'Option 2'] : [] };
+    questions.push(q);
+    renderCards(); renderPreview();
+    // focus the new card's label
+    const el = document.querySelector(`[data-uid="${q.uid}"] input.q-label`);
+    if (el) el.focus();
+  }
+
+  // ---- Question cards -----------------------------------------------------
+  const qEl = document.getElementById('questions');
+  function renderCards() {
+    document.getElementById('empty-hint').style.display = questions.length ? 'none' : '';
+    qEl.innerHTML = '';
+    questions.forEach((q, i) => qEl.appendChild(cardFor(q, i)));
+  }
+
+  function cardFor(q, i) {
+    const meta = TYPE_META[q.type];
+    const card = document.createElement('div');
+    card.className = 'card'; card.dataset.uid = q.uid; card.draggable = true;
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="drag" title="Drag to reorder">⠿</span>
+        <span class="badge">${meta.label}</span>
+        <span style="flex:1"></span>
+        <span class="hint">#${i + 1}</span>
+      </div>
+      <label>Question text</label>
+      <input type="text" class="q-label" placeholder="e.g. Household head name" value="${esc(q.label)}">
+      <div class="row">
+        <div><label>Field id (for export)</label>
+          <input type="text" class="q-id" value="${esc(q.id)}"></div>
+        <div><label>Hint (optional)</label>
+          <input type="text" class="q-hint" value="${esc(q.hint)}"></div>
+      </div>
+      ${meta.opts ? `<div class="opts"><label>Options (one per line)</label>
+        <textarea class="q-opts">${esc((q.options || []).join('\n'))}</textarea></div>` : ''}
+      <div class="card-actions">
+        ${q.type === 'note' ? '<span class="hint">Notes are display-only</span>'
+          : `<label class="chk"><input type="checkbox" class="q-req" ${q.required ? 'checked' : ''}> Required</label>`}
+        <button class="del">Delete</button>
+      </div>`;
+
+    // Wire inputs
+    const lbl = card.querySelector('.q-label');
+    lbl.oninput = () => {
+      q.label = lbl.value;
+      // auto-derive id from label until the user edits id manually
+      if (!q._idEdited) { q.id = uniqueId(slug(lbl.value) || q.type); idInput.value = q.id; }
+      renderPreview();
+    };
+    const idInput = card.querySelector('.q-id');
+    idInput.oninput = () => { q._idEdited = true; q.id = slug(idInput.value) || q.id; };
+    idInput.onblur = () => { idInput.value = q.id; };
+    card.querySelector('.q-hint').oninput = e => { q.hint = e.target.value; renderPreview(); };
+    const req = card.querySelector('.q-req'); if (req) req.onchange = e => { q.required = e.target.checked; renderPreview(); };
+    const opts = card.querySelector('.q-opts');
+    if (opts) opts.oninput = () => { q.options = opts.value.split('\n').map(s => s.trim()).filter(Boolean); renderPreview(); };
+    card.querySelector('.del').onclick = () => { questions = questions.filter(x => x.uid !== q.uid); renderCards(); renderPreview(); };
+
+    wireDrag(card, q);
+    return card;
+  }
+
+  // ---- Drag to reorder ----------------------------------------------------
+  let dragUid = null;
+  function wireDrag(card, q) {
+    card.addEventListener('dragstart', e => { dragUid = q.uid; card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move'; });
+    card.addEventListener('dragend', () => { dragUid = null; card.classList.remove('dragging');
+      document.querySelectorAll('.card.over').forEach(c => c.classList.remove('over')); });
+    card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('over'));
+    card.addEventListener('drop', e => {
+      e.preventDefault(); card.classList.remove('over');
+      if (dragUid == null || dragUid === q.uid) return;
+      const from = questions.findIndex(x => x.uid === dragUid);
+      const to = questions.findIndex(x => x.uid === q.uid);
+      const [moved] = questions.splice(from, 1);
+      questions.splice(to, 0, moved);
+      renderCards(); renderPreview();
+    });
+  }
+
+  // ---- Live preview (mirrors collect.html rendering) ----------------------
+  const pv = document.getElementById('preview');
+  function renderPreview() {
+    if (!questions.length) { pv.innerHTML = '<div class="empty">Nothing to preview yet.</div>'; return; }
+    pv.innerHTML = questions.map(q => {
+      if (q.type === 'note') return `<div class="pv-field pv-note">${esc(q.label || 'Note text')}</div>`;
+      const req = q.required ? ' <span class="req">*</span>' : '';
+      let ctl = '';
+      switch (q.type) {
+        case 'textarea': ctl = '<textarea rows="2" style="width:100%"></textarea>'; break;
+        case 'integer': case 'decimal': ctl = '<input type="number" disabled>'; break;
+        case 'date': ctl = '<input type="date" disabled>'; break;
+        case 'time': ctl = '<input type="time" disabled>'; break;
+        case 'select': ctl = `<select disabled><option>— select —</option>${(q.options||[]).map(o=>`<option>${esc(o)}</option>`).join('')}</select>`; break;
+        case 'radio': case 'multi_select':
+          ctl = (q.options||[]).map(o => `<div><input type="${q.type==='radio'?'radio':'checkbox'}" disabled> ${esc(o)}</div>`).join(''); break;
+        case 'yes_no': ctl = '<div><input type="radio" disabled> Yes &nbsp; <input type="radio" disabled> No</div>'; break;
+        case 'gps': ctl = '<input placeholder="lat,lng" disabled>'; break;
+        default: ctl = '<input type="text" disabled>';
+      }
+      return `<div class="pv-field"><div class="q">${esc(q.label || '(untitled)')}${req}</div>
+        ${q.hint ? `<div class="hint">${esc(q.hint)}</div>` : ''}${ctl}</div>`;
+    }).join('');
+  }
+
+  // ---- Validation + save --------------------------------------------------
+  function toSchema() {
+    return questions.map(q => {
+      const out = { id: q.id, type: q.type, label: q.label || q.id };
+      if (q.required && q.type !== 'note') out.required = true;
+      if (q.hint) out.hint = q.hint;
+      if (TYPE_META[q.type].opts) out.options = q.options || [];
+      return out;
+    });
+  }
+  function problems() {
+    const errs = [];
+    if (!document.getElementById('survey-title').value.trim()) errs.push('Survey needs a title.');
+    if (!questions.length) errs.push('Add at least one question.');
+    const ids = {};
+    questions.forEach((q, i) => {
+      if (!q.label && q.type !== 'note') errs.push(`Question #${i+1} needs text.`);
+      if (!q.id) errs.push(`Question #${i+1} needs a field id.`);
+      ids[q.id] = (ids[q.id] || 0) + 1;
+      if (TYPE_META[q.type].opts && (!q.options || !q.options.length))
+        errs.push(`"${q.label || q.id}" needs at least one option.`);
+    });
+    Object.entries(ids).forEach(([id, n]) => { if (n > 1) errs.push(`Duplicate field id: ${id}`); });
+    return errs;
+  }
+
+  document.getElementById('preview-json').onclick = () => {
+    const payload = { title: document.getElementById('survey-title').value,
+      description: document.getElementById('survey-desc').value, questions: toSchema() };
+    const w = window.open('', '_blank');
+    w.document.write('<pre style="padding:16px;font:13px monospace">' +
+      esc(JSON.stringify(payload, null, 2)) + '</pre>');
+  };
+
+  document.getElementById('save-btn').onclick = async () => {
+    const errs = problems();
+    if (errs.length) { toast(errs[0], 'err'); return; }
+    const payload = { title: document.getElementById('survey-title').value.trim(),
+      description: document.getElementById('survey-desc').value.trim(), questions: toSchema() };
+    const url = EDIT_ID ? `${API}/api/surveys/${EDIT_ID}` : `${API}/api/surveys`;
+    const method = EDIT_ID ? 'PUT' : 'POST';
+    try {
+      const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || 'save failed');
+      const id = (j.data && j.data.survey_id) || EDIT_ID;
+      toast('Saved ✓', 'ok');
+      setTimeout(() => { location.href = `collect.html?survey=${encodeURIComponent(id)}`; }, 700);
+    } catch (e) { toast('Save failed: ' + e.message, 'err'); }
+  };
+
+  // ---- Load existing survey when editing ---------------------------------
+  async function loadForEdit() {
+    if (!EDIT_ID) { renderCards(); renderPreview(); return; }
+    try {
+      const r = await fetch(`${API}/api/surveys/${EDIT_ID}`);
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error);
+      document.getElementById('survey-title').value = j.data.survey.title || '';
+      document.getElementById('survey-desc').value = j.data.survey.description || '';
+      (j.data.questions || []).forEach(q => {
+        questions.push({ uid: uidSeq++, type: (q.type||'text'), id: q.id || uniqueId('q'),
+          label: q.label || '', required: !!q.required, hint: q.hint || '',
+          options: q.options || q.choices || [], _idEdited: true });
+      });
+    } catch (e) { toast('Could not load survey to edit: ' + e.message, 'err'); }
+    renderCards(); renderPreview();
+  }
+
+  // ---- helpers ------------------------------------------------------------
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  let toastT; function toast(msg, kind){ const el=document.getElementById('toast');
+    el.textContent=msg; el.className='show '+(kind||''); clearTimeout(toastT);
+    toastT=setTimeout(()=>el.className='',2800); }
+
+  loadForEdit();
+  </script>
+</body>
+</html>

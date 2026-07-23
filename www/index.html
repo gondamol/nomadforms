@@ -26,6 +26,8 @@
 <body>
   <header><h1>NomadForms</h1><p><span class="dot" id="dot"></span><span id="net">…</span> · offline-capable field collection</p></header>
   <main>
+    <a class="card" href="builder.html" style="background:#0f766e;color:#fff;border-color:#0b5850">
+      <h2>+ New survey</h2><p style="color:#d7f0ec">Build a survey with the drag-and-drop editor</p></a>
     <div id="list"><div class="muted">Loading surveys…</div></div>
   </main>
   <script>
@@ -40,9 +42,11 @@
       const el = document.getElementById('list');
       if (!j.success || !j.data || !j.data.length) { el.innerHTML =
         '<div class="muted">No surveys yet. Create one via the API, then reload.</div>'; return; }
-      el.innerHTML = j.data.map(s => `<a class="card" href="collect.html?survey=${encodeURIComponent(s.survey_id)}">
-        <h2>${esc(s.title)}</h2><p>${esc(s.description || 'Tap to start collecting')}</p>
-        <div class="go">Start collecting →</div></a>`).join('');
+      el.innerHTML = j.data.map(s => { const id = encodeURIComponent(s.survey_id);
+        return `<div class="card"><h2>${esc(s.title)}</h2><p>${esc(s.description || '')}</p>
+        <div class="go"><a href="collect.html?survey=${id}" style="color:#0f766e;text-decoration:none">Start collecting →</a>
+        &nbsp;·&nbsp; <a href="builder.html?survey=${id}" style="color:#5b6673;text-decoration:none">Edit</a></div></div>`;
+      }).join('');
     }).catch(()=>{ document.getElementById('list').innerHTML =
       '<div class="muted">Cannot reach server. If you have collected offline, reconnect to sync.</div>'; });
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
