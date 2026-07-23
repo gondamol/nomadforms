@@ -29,6 +29,7 @@ WORKDIR /app
 COPY survey-runtime /app/survey-runtime
 COPY api /app/api
 COPY database /app/database
+COPY www /app/www
 
 RUN R CMD INSTALL /app/survey-runtime
 

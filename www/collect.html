@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <title>NomadForms — Collect</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root { --brand:#0f766e; --brand-d:#0b5850; --bg:#f4f6f8; --card:#fff;
+            --ink:#1a2430; --muted:#5b6673; --line:#dfe4e9; --ok:#15803d;
+            --warn:#b45309; --err:#b91c1c; --touch:48px; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    body { margin:0; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+           color:var(--ink); background:var(--bg); }
+    header { position:sticky; top:0; z-index:10; background:var(--brand); color:#fff;
+             padding:calc(env(safe-area-inset-top) + 12px) 16px 12px; }
+    header h1 { margin:0; font-size:1.1rem; font-weight:600; }
+    #status { display:flex; gap:8px; align-items:center; font-size:.8rem; margin-top:4px; opacity:.95; }
+    .dot { width:9px; height:9px; border-radius:50%; background:#fbbf24; }
+    .dot.online { background:#4ade80; } .dot.offline { background:#f87171; }
+    main { max-width:640px; margin:0 auto; padding:16px; }
+    .field { background:var(--card); border:1px solid var(--line); border-radius:12px;
+             padding:14px 16px; margin-bottom:12px; }
+    .field label { display:block; font-weight:600; margin-bottom:8px; }
+    .field .hint { font-weight:400; color:var(--muted); font-size:.85rem; margin-top:2px; }
+    .req { color:var(--err); }
+    input, select, textarea { width:100%; min-height:var(--touch); font-size:16px;
+             padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+             background:#fff; color:var(--ink); }
+    input:focus, select:focus, textarea:focus { outline:2px solid var(--brand); border-color:var(--brand); }
+    textarea { min-height:88px; resize:vertical; }
+    .choice { display:flex; align-items:center; gap:10px; min-height:var(--touch);
+              padding:2px 0; font-weight:400; }
+    .choice input { width:22px; height:22px; min-height:0; }
+    .note { background:#f0fdfa; border-color:#99f6e4; color:#134e4a; }
+    .gps-row { display:flex; gap:8px; align-items:center; }
+    .gps-row input { flex:1; }
+    button { font:inherit; font-weight:600; min-height:var(--touch); border:0;
+             border-radius:10px; padding:12px 16px; cursor:pointer; }
+    .btn-sec { background:#e6efee; color:var(--brand-d); }
+    .btn-pri { background:var(--brand); color:#fff; width:100%; margin-top:4px; }
+    .btn-pri:active { background:var(--brand-d); }
+    .err-msg { color:var(--err); font-size:.85rem; margin-top:6px; display:none; }
+    .field.invalid input, .field.invalid select, .field.invalid textarea { border-color:var(--err); }
+    .field.invalid .err-msg { display:block; }
+    #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+             background:var(--ink); color:#fff; padding:12px 18px; border-radius:10px;
+             font-size:.9rem; opacity:0; pointer-events:none; transition:opacity .2s; max-width:90%; }
+    #toast.show { opacity:1; }
+    #toast.ok { background:var(--ok); } #toast.warn { background:var(--warn); }
+    .bar { display:flex; justify-content:space-between; align-items:center; gap:12px;
+           font-size:.8rem; color:var(--muted); margin-bottom:12px; }
+    #pending { font-weight:600; }
+    .skeleton { color:var(--muted); text-align:center; padding:40px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="survey-title">NomadForms</h1>
+    <div id="status"><span class="dot" id="net-dot"></span><span id="net-text">Checking…</span></div>
+  </header>
+  <main>
+    <div class="bar">
+      <span id="enum">Enumerator: <b id="enum-name">device</b></span>
+      <span id="pending">0 pending sync</span>
+    </div>
+    <form id="survey-form"><div class="skeleton" id="loading">Loading survey…</div></form>
+    <button type="button" class="btn-pri" id="submit-btn" hidden>Submit &amp; save</button>
+  </main>
+  <div id="toast"></div>
+
+  <script>
+  // ---- Config -------------------------------------------------------------
+  // API base defaults to same origin; override with ?api=https://host:port
+  const params = new URLSearchParams(location.search);
+  const API = (params.get('api') || '').replace(/\/$/, '') || location.origin;
+  const SURVEY_ID = params.get('survey');
+  const ENUM = params.get('enum') || 'device-' + deviceTag();
+  document.getElementById('enum-name').textContent = ENUM;
+
+  function deviceTag() {
+    let t = localStorage.getItem('nf_device');
+    if (!t) { t = Math.random().toString(36).slice(2, 8); localStorage.setItem('nf_device', t); }
+    return t;
+  }
+  function uuid() {
+    return (crypto.randomUUID && crypto.randomUUID()) ||
+      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); });
+  }
+
+  // ---- Minimal correct IndexedDB wrapper ---------------------------------
+  const DB_NAME = 'nomadforms', DB_VER = 1;
+  function openDB() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open(DB_NAME, DB_VER);
+      r.onupgradeneeded = () => {
+        const db = r.result;
+        if (!db.objectStoreNames.contains('queue'))
+          db.createObjectStore('queue', { keyPath: 'response_id' });
+        if (!db.objectStoreNames.contains('drafts'))
+          db.createObjectStore('drafts', { keyPath: 'survey_id' });
+        if (!db.objectStoreNames.contains('surveys'))
+          db.createObjectStore('surveys', { keyPath: 'survey_id' });
+      };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  function tx(db, store, mode, fn) {
+    return new Promise((res, rej) => {
+      const t = db.transaction(store, mode);
+      const s = t.objectStore(store);
+      const out = fn(s);
+      t.oncomplete = () => res(out && out.result !== undefined ? out.result : out);
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error);
+    });
+  }
+  const idbPut  = (st, v)   => openDB().then(db => tx(db, st, 'readwrite', s => s.put(v)));
+  const idbGet  = (st, k)   => openDB().then(db => tx(db, st, 'readonly',  s => s.get(k)));
+  const idbDel  = (st, k)   => openDB().then(db => tx(db, st, 'readwrite', s => s.delete(k)));
+  const idbAll  = (st)      => openDB().then(db => new Promise((res, rej) => {
+      const out = []; const t = db.transaction(st, 'readonly');
+      t.objectStore(st).openCursor().onsuccess = e => {
+        const c = e.target.result; if (c) { out.push(c.value); c.continue(); } };
+      t.oncomplete = () => res(out); t.onerror = () => rej(t.error); }));
+
+  // ---- Network status -----------------------------------------------------
+  const dot = document.getElementById('net-dot'), netText = document.getElementById('net-text');
+  function setNet() {
+    const on = navigator.onLine;
+    dot.className = 'dot ' + (on ? 'online' : 'offline');
+    netText.textContent = on ? 'Online' : 'Offline — data saved on device';
+    if (on) flushQueue();
+  }
+  window.addEventListener('online', setNet);
+  window.addEventListener('offline', setNet);
+
+  async function updatePending() {
+    const q = await idbAll('queue');
+    document.getElementById('pending').textContent =
+      q.length + ' pending sync';
+  }
+
+  // ---- Toast --------------------------------------------------------------
+  let toastT;
+  function toast(msg, kind) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = 'show ' + (kind || '');
+    clearTimeout(toastT); toastT = setTimeout(() => el.className = '', 2600);
+  }
+
+  // ---- Survey loading (network-first, cache fallback) --------------------
+  let survey = null;
+  async function loadSurvey() {
+    if (!SURVEY_ID) { document.getElementById('loading').textContent =
+      'No survey specified. Add ?survey=<id> to the URL.'; return; }
+    try {
+      const r = await fetch(`${API}/api/surveys/${SURVEY_ID}`);
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || 'not found');
+      survey = { survey_id: SURVEY_ID, title: j.data.survey.title, questions: j.data.questions };
+      await idbPut('surveys', survey);
+    } catch (e) {
+      survey = await idbGet('surveys', SURVEY_ID); // offline fallback
+      if (!survey) { document.getElementById('loading').textContent =
+        'Cannot load survey (offline and not cached).'; return; }
+    }
+    document.getElementById('survey-title').textContent = survey.title || 'Survey';
+    renderForm(survey.questions || []);
+    await restoreDraft();
+    updatePending();
+  }
+
+  // ---- Rendering ----------------------------------------------------------
+  function renderForm(questions) {
+    const form = document.getElementById('survey-form');
+    form.innerHTML = '';
+    const list = Array.isArray(questions) ? questions : [];
+    if (!list.length) { form.innerHTML =
+      '<div class="skeleton">This survey has no questions yet.</div>'; return; }
+    for (const q of list) form.appendChild(renderField(q));
+    document.getElementById('submit-btn').hidden = false;
+    form.addEventListener('input', debounce(saveDraft, 400));
+    form.addEventListener('change', saveDraft);
+  }
+
+  function renderField(q) {
+    const wrap = document.createElement('div');
+    const type = (q.type || 'text').toLowerCase();
+    if (type === 'note') {
+      wrap.className = 'field note';
+      wrap.innerHTML = `<div>${esc(q.label || q.id)}</div>`;
+      return wrap;
+    }
+    wrap.className = 'field'; wrap.dataset.qid = q.id; wrap.dataset.type = type;
+    if (q.required) wrap.dataset.required = '1';
+    const label = `<label for="q_${esc(q.id)}">${esc(q.label || q.id)}` +
+      (q.required ? ' <span class="req">*</span>' : '') +
+      (q.hint ? `<span class="hint">${esc(q.hint)}</span>` : '') + `</label>`;
+    let control = '';
+    const id = `q_${esc(q.id)}`;
+    switch (type) {
+      case 'integer': control = `<input id="${id}" name="${esc(q.id)}" type="number" inputmode="numeric" step="1">`; break;
+      case 'decimal': control = `<input id="${id}" name="${esc(q.id)}" type="number" inputmode="decimal" step="any">`; break;
+      case 'email':   control = `<input id="${id}" name="${esc(q.id)}" type="email" inputmode="email">`; break;
+      case 'phone':   control = `<input id="${id}" name="${esc(q.id)}" type="tel" inputmode="tel">`; break;
+      case 'date':    control = `<input id="${id}" name="${esc(q.id)}" type="date">`; break;
+      case 'time':    control = `<input id="${id}" name="${esc(q.id)}" type="time">`; break;
+      case 'textarea':case 'long_text': control = `<textarea id="${id}" name="${esc(q.id)}"></textarea>`; break;
+      case 'yes_no':  control = choices(q.id, [{v:'yes',l:'Yes'},{v:'no',l:'No'}], 'radio'); break;
+      case 'select':  case 'single_select':
+        control = `<select id="${id}" name="${esc(q.id)}"><option value="">— select —</option>` +
+          optList(q).map(o => `<option value="${esc(o.v)}">${esc(o.l)}</option>`).join('') + `</select>`; break;
+      case 'radio':   control = choices(q.id, optList(q), 'radio'); break;
+      case 'multi_select': case 'checkbox':
+        control = choices(q.id, optList(q), 'checkbox'); break;
+      case 'gps':
+        control = `<div class="gps-row"><input id="${id}" name="${esc(q.id)}" placeholder="lat,lng" readonly>` +
+          `<button type="button" class="btn-sec" onclick="captureGPS('${esc(q.id)}')">📍 Capture</button></div>`; break;
+      default:        control = `<input id="${id}" name="${esc(q.id)}" type="text">`;
+    }
+    wrap.innerHTML = label + control + `<div class="err-msg">This field is required.</div>`;
+    return wrap;
+  }
+  function optList(q) {
+    const opts = q.options || q.choices || [];
+    return opts.map(o => typeof o === 'string' ? {v:o, l:o} : {v:o.value ?? o.v ?? o.id, l:o.label ?? o.l ?? o.value});
+  }
+  function choices(qid, opts, kind) {
+    return opts.map((o,i) => `<label class="choice"><input type="${kind}" name="${esc(qid)}" ` +
+      `value="${esc(o.v)}" id="q_${esc(qid)}_${i}">${esc(o.l)}</label>`).join('');
+  }
+
+  window.captureGPS = function(qid) {
+    const el = document.querySelector(`[name="${cssEsc(qid)}"]`);
+    if (!navigator.geolocation) { toast('No GPS on this device', 'warn'); return; }
+    toast('Getting location…');
+    navigator.geolocation.getCurrentPosition(
+      p => { el.value = p.coords.latitude.toFixed(6) + ',' + p.coords.longitude.toFixed(6);
+             saveDraft(); toast('Location captured', 'ok'); },
+      () => toast('Location permission denied', 'warn'),
+      { enableHighAccuracy:true, timeout:10000 });
+  };
+
+  // ---- Collect values -----------------------------------------------------
+  function collect() {
+    const data = {};
+    document.querySelectorAll('.field[data-qid]').forEach(f => {
+      const qid = f.dataset.qid, type = f.dataset.type;
+      if (type === 'multi_select' || type === 'checkbox') {
+        const v = [...f.querySelectorAll('input:checked')].map(i => i.value);
+        if (v.length) data[qid] = v;
+      } else if (type === 'yes_no' || type === 'radio') {
+        const c = f.querySelector('input:checked'); if (c) data[qid] = c.value;
+      } else {
+        const c = f.querySelector('input,select,textarea');
+        if (c && c.value !== '') data[qid] = c.value;
+      }
+    });
+    return data;
+  }
+  function validate() {
+    let ok = true;
+    document.querySelectorAll('.field[data-required]').forEach(f => {
+      const has = Object.prototype.hasOwnProperty.call(collect(), f.dataset.qid);
+      f.classList.toggle('invalid', !has); if (!has) ok = false;
+    });
+    return ok;
+  }
+
+  // ---- Draft persistence --------------------------------------------------
+  let sessionId = sessionStorage.getItem('nf_session') || uuid();
+  sessionStorage.setItem('nf_session', sessionId);
+  async function saveDraft() {
+    if (!survey) return;
+    await idbPut('drafts', { survey_id: survey.survey_id, session_id: sessionId,
+      data: collect(), saved_at: new Date().toISOString() });
+  }
+  async function restoreDraft() {
+    const d = await idbGet('drafts', SURVEY_ID);
+    if (!d || !d.data) return;
+    for (const [qid, val] of Object.entries(d.data)) setValue(qid, val);
+    toast('Resumed saved draft');
+  }
+  function setValue(qid, val) {
+    const f = document.querySelector(`.field[data-qid="${cssEsc(qid)}"]`); if (!f) return;
+    const t = f.dataset.type;
+    if (t === 'multi_select' || t === 'checkbox') {
+      (Array.isArray(val)?val:[val]).forEach(v => {
+        const c = f.querySelector(`input[value="${cssEsc(v)}"]`); if (c) c.checked = true; });
+    } else if (t === 'yes_no' || t === 'radio') {
+      const c = f.querySelector(`input[value="${cssEsc(val)}"]`); if (c) c.checked = true;
+    } else { const c = f.querySelector('input,select,textarea'); if (c) c.value = val; }
+  }
+
+  // ---- Submit + sync ------------------------------------------------------
+  document.getElementById('submit-btn').addEventListener('click', submitForm);
+  async function submitForm() {
+    if (!validate()) { toast('Please complete required fields', 'warn');
+      document.querySelector('.field.invalid')?.scrollIntoView({behavior:'smooth', block:'center'}); return; }
+    const submission = {
+      response_id: uuid(), survey_id: survey.survey_id, session_id: sessionId,
+      participant_id: null, is_offline: !navigator.onLine, responses: collect(),
+      device_info: { enumerator: ENUM, ua: navigator.userAgent, at: new Date().toISOString() },
+      submitted_at: new Date().toISOString()
+    };
+    await idbPut('queue', submission);       // durable first, always
+    await idbDel('drafts', survey.survey_id);
+    document.getElementById('survey-form').reset();
+    document.querySelectorAll('.field.invalid').forEach(f => f.classList.remove('invalid'));
+    sessionId = uuid(); sessionStorage.setItem('nf_session', sessionId);
+    updatePending();
+    if (navigator.onLine) { await flushQueue(); }
+    else toast('Saved on device — will sync when online', 'ok');
+  }
+
+  let flushing = false;
+  async function flushQueue() {
+    if (flushing || !navigator.onLine) return;
+    flushing = true;
+    try {
+      const q = await idbAll('queue');
+      if (!q.length) { flushing = false; return; }
+      const r = await fetch(`${API}/api/sync`, { method:'POST',
+        headers:{'Content-Type':'application/json'}, body: JSON.stringify({ responses: q }) });
+      const j = await r.json();
+      if (j.success) {
+        const failedIdx = new Set((j.data.errors||[]).map(e => e.index-1));
+        for (let i=0;i<q.length;i++) if (!failedIdx.has(i)) await idbDel('queue', q[i].response_id);
+        await updatePending();
+        const synced = j.data.synced || 0;
+        if (synced) toast(`Synced ${synced} submission${synced>1?'s':''}`, 'ok');
+      }
+    } catch (e) { /* stay queued; will retry on next online/submit */ }
+    flushing = false;
+  }
+
+  // ---- helpers ------------------------------------------------------------
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function cssEsc(s){ return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g,'\\"'); }
+  function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+
+  if ('serviceWorker' in navigator)
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  setNet(); loadSurvey();
+  setInterval(flushQueue, 30000); // periodic auto-sync
+  </script>
+</body>
+</html>

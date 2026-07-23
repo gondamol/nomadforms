@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <title>NomadForms</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    * { box-sizing:border-box; }
+    body { margin:0; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+           color:#1a2430; background:#f4f6f8; }
+    header { background:#0f766e; color:#fff; padding:calc(env(safe-area-inset-top) + 20px) 16px 20px; }
+    header h1 { margin:0; font-size:1.3rem; } header p { margin:4px 0 0; opacity:.9; font-size:.9rem; }
+    main { max-width:640px; margin:0 auto; padding:16px; }
+    .card { display:block; background:#fff; border:1px solid #dfe4e9; border-radius:12px;
+            padding:16px; margin-bottom:12px; text-decoration:none; color:inherit; }
+    .card:active { background:#f0fdfa; }
+    .card h2 { margin:0 0 4px; font-size:1.05rem; } .card p { margin:0; color:#5b6673; font-size:.88rem; }
+    .card .go { color:#0f766e; font-weight:600; font-size:.85rem; margin-top:8px; }
+    .muted { color:#5b6673; text-align:center; padding:32px 0; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#f87171; margin-right:6px; }
+    .dot.online { background:#4ade80; }
+  </style>
+</head>
+<body>
+  <header><h1>NomadForms</h1><p><span class="dot" id="dot"></span><span id="net">…</span> · offline-capable field collection</p></header>
+  <main>
+    <div id="list"><div class="muted">Loading surveys…</div></div>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const API = (params.get('api') || '').replace(/\/$/, '') || location.origin;
+    const dot = document.getElementById('dot'), net = document.getElementById('net');
+    function setNet(){ const on = navigator.onLine;
+      dot.className = 'dot ' + (on?'online':''); net.textContent = on?'Online':'Offline'; }
+    addEventListener('online', setNet); addEventListener('offline', setNet); setNet();
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    fetch(`${API}/api/surveys`).then(r=>r.json()).then(j=>{
+      const el = document.getElementById('list');
+      if (!j.success || !j.data || !j.data.length) { el.innerHTML =
+        '<div class="muted">No surveys yet. Create one via the API, then reload.</div>'; return; }
+      el.innerHTML = j.data.map(s => `<a class="card" href="collect.html?survey=${encodeURIComponent(s.survey_id)}">
+        <h2>${esc(s.title)}</h2><p>${esc(s.description || 'Tap to start collecting')}</p>
+        <div class="go">Start collecting →</div></a>`).join('');
+    }).catch(()=>{ document.getElementById('list').innerHTML =
+      '<div class="muted">Cannot reach server. If you have collected offline, reconnect to sync.</div>'; });
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  </script>
+</body>
+</html>

@@ -20,4 +20,19 @@ cat(sprintf("API docs at http://%s:%d/__docs__/\n", host, port))
 
 pr <- plumber::plumb(file.path(api_dir, "server.R"))
 pr$setDocs(TRUE)
+
+# Serve the mobile PWA (collect page, landing, service worker) as static files
+# at /app so a phone can open http://<host>:<port>/app/ and collect data.
+www_dir <- Sys.getenv("WWW_DIR", "")
+if (www_dir == "") {
+  for (cand in c(file.path(api_dir, "..", "www"), "/app/www"))
+    if (dir.exists(cand)) { www_dir <- normalizePath(cand); break }
+}
+if (nzchar(www_dir) && dir.exists(www_dir)) {
+  pr$mount("/app", plumber::PlumberStatic$new(www_dir))
+  cat(sprintf("Serving PWA from %s at http://%s:%d/app/\n", www_dir, host, port))
+} else {
+  cat("No www directory found; PWA static files not served.\n")
+}
+
 pr$run(host = host, port = port)
