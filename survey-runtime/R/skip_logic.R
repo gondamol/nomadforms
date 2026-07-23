@@ -215,12 +215,54 @@ nf_show_if_any <- function(...) {
 }
 
 
+#' Transpile a Simple Skip-Logic Condition to JavaScript
+#'
+#' Converts a string condition that references question ids (e.g.
+#' `"age >= 18 && county == 'Turkana'"`) into a JavaScript boolean expression.
+#' Bare identifiers are rewritten to `nfGetValue('id')` lookups; numeric and
+#' quoted-string literals, comparison operators (`==`, `!=`, `<`, `<=`, `>`,
+#' `>=`) and logical operators (`&&`, `||`, `!`) are supported. Values are
+#' coerced with `nfNum()` so a numeric comparison works against string form
+#' inputs. Unsupported constructs raise an error rather than silently passing.
+#'
+#' @param condition A single-line string condition
+#' @return A JavaScript boolean expression as a string
+#' @export
+nf_condition_to_js <- function(condition) {
+  if (is.null(condition) || !is.character(condition) || length(condition) != 1) {
+    stop("condition must be a single string")
+  }
+  # Tokenise into strings, numbers, operators, identifiers.
+  pattern <- "'[^']*'|\"[^\"]*\"|[0-9]+\\.?[0-9]*|>=|<=|==|!=|&&|\\|\\||[<>!()]|[A-Za-z_][A-Za-z0-9_]*"
+  m <- regmatches(condition, gregexpr(pattern, condition))[[1]]
+  if (length(m) == 0) stop("empty or unparseable condition: ", condition)
+  reserved <- c("true", "false", "null")
+  out <- vapply(m, function(tok) {
+    if (grepl("^['\"].*['\"]$", tok)) return(paste0("'", gsub("^['\"]|['\"]$", "", tok), "'"))
+    if (grepl("^[0-9]", tok)) return(tok)
+    if (tok %in% c(">=", "<=", "==", "!=", "&&", "||", "<", ">", "!", "(", ")")) return(tok)
+    if (tok %in% reserved) return(tok)
+    # identifier -> value lookup
+    paste0("nfGetValue('", tok, "')")
+  }, character(1))
+  js <- paste(unname(out), collapse = " ")
+  # Coerce both sides of a bare numeric comparison to numbers.
+  js <- gsub("(nfGetValue\\('[A-Za-z0-9_]+'\\))\\s*(<=|>=|<|>)\\s*([0-9]+\\.?[0-9]*)",
+             "nfNum(\\1) \\2 \\3", js)
+  js
+}
+
 #' Generate JavaScript for Client-Side Skip Logic
 #'
-#' Converts R skip logic rules to JavaScript for immediate UI updates
+#' Converts an R skip-logic rule to JavaScript that shows/hides a question and
+#' clears its value when hidden. The rule may be a string condition (see
+#' [nf_condition_to_js()]) or a list with a `show_if` string. The generated
+#' code expects two helpers to be present on the page: `nfGetValue(id)` and
+#' `nfNum(x)`.
 #'
 #' @param question_id Question ID
-#' @param skip_rule Skip logic rule
+#' @param skip_rule Skip logic rule: a condition string, or `list(show_if=...)`
+#'   / `list(hide_if=...)`
 #'
 #' @return JavaScript code as string
 #' @export
@@ -228,10 +270,19 @@ nf_skip_logic_js <- function(question_id, skip_rule) {
   if (is.null(skip_rule)) {
     return("")
   }
-  
-  # This is a simplified version - in production you'd want a proper R-to-JS transpiler
-  # For now, we'll generate basic JavaScript for common patterns
-  
+
+  # Resolve the rule down to a "show when true" JS expression.
+  show_expr <- if (is.character(skip_rule)) {
+    nf_condition_to_js(skip_rule)
+  } else if (is.list(skip_rule) && !is.null(skip_rule$show_if) && is.character(skip_rule$show_if)) {
+    nf_condition_to_js(skip_rule$show_if)
+  } else if (is.list(skip_rule) && !is.null(skip_rule$hide_if) && is.character(skip_rule$hide_if)) {
+    paste0("!(", nf_condition_to_js(skip_rule$hide_if), ")")
+  } else {
+    stop("Unsupported skip_rule: provide a condition string or a list with a ",
+         "character 'show_if' or 'hide_if'")
+  }
+
   js_code <- sprintf("
     function updateVisibility_%s() {
       var questionDiv = document.getElementById('question_%s');
@@ -258,8 +309,8 @@ nf_skip_logic_js <- function(question_id, skip_rule) {
     // Run on load and on input changes
     document.addEventListener('DOMContentLoaded', updateVisibility_%s);
     document.addEventListener('input', updateVisibility_%s);
-  ", question_id, question_id, "true", question_id, question_id)  # TODO: Convert R condition to JS
-  
+  ", question_id, question_id, show_expr, question_id, question_id)
+
   return(js_code)
 }
 

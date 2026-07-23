@@ -36,3 +36,26 @@ test_that("show_if_in matches membership", {
   expect_true(rule(list(county = "Turkana")))
   expect_false(rule(list(county = "Nairobi")))
 })
+
+test_that("nf_condition_to_js transpiles conditions to JS lookups", {
+  expect_equal(nf_condition_to_js("age >= 18"),
+               "nfNum(nfGetValue('age')) >= 18")
+  expect_equal(nf_condition_to_js("county == 'Turkana'"),
+               "nfGetValue('county') == 'Turkana'")
+  expect_match(nf_condition_to_js("a > 1 && b == 'x'"), "&&")
+})
+
+test_that("nf_skip_logic_js embeds the transpiled show condition", {
+  js <- nf_skip_logic_js("q_notes", list(show_if = "children_u5 > 0"))
+  expect_match(js, "nfNum\\(nfGetValue\\('children_u5'\\)\\) > 0")
+  expect_match(js, "updateVisibility_q_notes")
+})
+
+test_that("nf_skip_logic_js inverts a hide_if condition", {
+  js <- nf_skip_logic_js("q1", list(hide_if = "x == 'no'"))
+  expect_match(js, "!\\(nfGetValue\\('x'\\) == 'no'\\)")
+})
+
+test_that("unsupported skip_rule shapes error clearly", {
+  expect_error(nf_skip_logic_js("q1", list(foo = "bar")), "Unsupported skip_rule")
+})
