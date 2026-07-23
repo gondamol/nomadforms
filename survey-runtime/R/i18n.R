@@ -383,5 +383,4 @@ nf_language_selector <- function(languages = c("en" = "English", "es" = "Españo
   )
 }
 
-`%||%` <- function(a, b) if (is.null(a)) b else a
 

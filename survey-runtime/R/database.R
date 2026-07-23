@@ -81,130 +81,117 @@ nf_database <- function(host = "localhost",
 #' @return TRUE if successful
 #' @export
 nf_init_schema <- function(conn) {
-  
-  # Projects table
+
+  # Survey definitions.
   DBI::dbExecute(conn, "
     CREATE TABLE IF NOT EXISTS projects (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
+      description TEXT,
       created_by UUID,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
       codebook JSONB,
       survey_qmd TEXT,
       survey_r TEXT,
-      settings JSONB
+      settings JSONB DEFAULT '{}'::jsonb
     );
   ")
-  
-  # Responses table
+
+  # Canonical document store: one row per completed form. Mirrors
+  # database/migrations/002_submissions.sql so an R-only user can bootstrap
+  # without running the SQL migrations by hand.
   DBI::dbExecute(conn, "
-    CREATE TABLE IF NOT EXISTS responses (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-      participant_id TEXT,
+    CREATE TABLE IF NOT EXISTS submissions (
+      response_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      survey_id TEXT NOT NULL,
+      project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
       session_id TEXT NOT NULL,
-      page_id TEXT,
-      question_id TEXT NOT NULL,
-      response_value TEXT,
-      response_metadata JSONB,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW(),
-      synced_at TIMESTAMP,
-      device_id TEXT,
-      user_id UUID
+      participant_id TEXT,
+      response_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      device_info JSONB DEFAULT '{}'::jsonb,
+      is_offline BOOLEAN DEFAULT FALSE,
+      status TEXT NOT NULL DEFAULT 'submitted'
+        CHECK (status IN ('submitted','approved','rejected','deleted')),
+      submitted_at TIMESTAMPTZ DEFAULT NOW(),
+      synced_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   ")
-  
-  # Audit log table
+
   DBI::dbExecute(conn, "
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-      response_id UUID REFERENCES responses(id) ON DELETE SET NULL,
-      action TEXT NOT NULL,
-      old_value JSONB,
-      new_value JSONB,
-      user_id UUID,
-      device_id TEXT,
-      timestamp TIMESTAMP DEFAULT NOW()
-    );
+    CREATE INDEX IF NOT EXISTS idx_submissions_survey ON submissions(survey_id);
   ")
-  
-  # Create indexes
   DBI::dbExecute(conn, "
-    CREATE INDEX IF NOT EXISTS idx_responses_session 
-    ON responses(session_id);
+    CREATE INDEX IF NOT EXISTS idx_submissions_session ON submissions(session_id);
   ")
-  
+
+  # EAV projection used by the export/analysis path.
   DBI::dbExecute(conn, "
-    CREATE INDEX IF NOT EXISTS idx_responses_participant 
-    ON responses(participant_id);
+    CREATE OR REPLACE VIEW answers AS
+    SELECT s.response_id AS submission_id, s.survey_id, s.project_id,
+           s.session_id, s.participant_id, s.submitted_at, s.status,
+           kv.key AS question_id, kv.value AS response_value
+    FROM submissions s,
+         LATERAL jsonb_each_text(s.response_data) AS kv(key, value)
+    WHERE s.status <> 'deleted';
   ")
-  
-  DBI::dbExecute(conn, "
-    CREATE INDEX IF NOT EXISTS idx_responses_project 
-    ON responses(project_id);
-  ")
-  
+
   message("Database schema initialized successfully")
   return(TRUE)
 }
 
 
-#' Save Survey Response
+#' Save a Completed Survey Submission
 #'
-#' Stores a survey response in the database with metadata.
+#' Stores one completed form as a single document row in `submissions`. The
+#' whole set of answers is the unit that is written and synced, which is what
+#' makes offline retries idempotent.
 #'
 #' @param conn DBI connection object
-#' @param project_id Project UUID
+#' @param survey_id Survey identifier (text; matches the PWA's survey id)
 #' @param session_id Session identifier
-#' @param question_id Question identifier
-#' @param response_value Response value
+#' @param responses Named list of question ids to values
 #' @param participant_id Optional participant identifier
-#' @param page_id Optional page identifier
-#' @param metadata Optional metadata (list)
+#' @param project_id Optional project UUID this survey belongs to
+#' @param device_info Optional named list of device metadata
+#' @param response_id Optional client-supplied UUID (enables idempotent upsert)
 #'
-#' @return Response UUID
+#' @return Submission UUID
 #' @export
-nf_save_response <- function(conn,
-                              project_id,
-                              session_id,
-                              question_id,
-                              response_value,
-                              participant_id = NULL,
-                              page_id = NULL,
-                              metadata = NULL) {
-  
-  # Convert metadata to JSON if provided
-  metadata_json <- if (!is.null(metadata)) {
-    jsonlite::toJSON(metadata, auto_unbox = TRUE)
-  } else {
-    NULL
+nf_save_submission <- function(conn,
+                               survey_id,
+                               session_id,
+                               responses,
+                               participant_id = NULL,
+                               project_id = NULL,
+                               device_info = NULL,
+                               response_id = NULL) {
+
+  data_json   <- jsonlite::toJSON(responses, auto_unbox = TRUE)
+  device_json <- jsonlite::toJSON(device_info %||% list(), auto_unbox = TRUE)
+
+  if (is.null(response_id)) {
+    result <- DBI::dbGetQuery(conn, "
+      INSERT INTO submissions
+        (survey_id, project_id, session_id, participant_id, response_data, device_info)
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+      RETURNING response_id;
+    ", params = list(survey_id, project_id, session_id, participant_id,
+                     data_json, device_json))
+    return(result$response_id)
   }
-  
-  # Insert response
-  result <- DBI::dbGetQuery(conn, "
-    INSERT INTO responses (
-      project_id,
-      session_id,
-      question_id,
-      response_value,
-      participant_id,
-      page_id,
-      response_metadata
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-    RETURNING id;
-  ", params = list(
-    project_id,
-    session_id,
-    question_id,
-    as.character(response_value),
-    participant_id,
-    page_id,
-    metadata_json
-  ))
-  
-  return(result$id)
+
+  DBI::dbExecute(conn, "
+    INSERT INTO submissions
+      (response_id, survey_id, project_id, session_id, participant_id,
+       response_data, device_info)
+    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+    ON CONFLICT (response_id) DO UPDATE
+      SET response_data = EXCLUDED.response_data, updated_at = NOW();
+  ", params = list(response_id, survey_id, project_id, session_id,
+                   participant_id, data_json, device_json))
+  response_id
 }
 

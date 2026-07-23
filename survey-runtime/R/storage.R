@@ -1,222 +1,138 @@
-#' Save Response with Connection Handling
+#' Save a Survey Submission (with connection handling)
 #'
-#' Saves a survey response with automatic connection management
+#' Convenience wrapper around [nf_save_submission()] that manages the database
+#' connection. The full set of answers for one completed form is written as a
+#' single document row.
 #'
-#' @param project_id Project UUID
+#' @param survey_id Survey identifier (text)
 #' @param session_id Session identifier
-#' @param responses Named list of question IDs and response values
+#' @param responses Named list of question ids to values
 #' @param participant_id Optional participant identifier
-#' @param page_id Optional page identifier
-#' @param metadata Optional metadata (list)
-#' @param conn Optional existing connection, or will create one
+#' @param project_id Optional project UUID
+#' @param device_info Optional named list of device metadata
+#' @param response_id Optional client-supplied UUID (idempotent upsert)
+#' @param conn Optional existing connection; one is created if omitted
 #'
-#' @return List with success status and response IDs
+#' @return List with success status and the submission id
 #' @export
-nf_save_survey <- function(project_id,
-                            session_id,
-                            responses,
-                            participant_id = NULL,
-                            page_id = NULL,
-                            metadata = NULL,
-                            conn = NULL) {
-  
-  # Create connection if not provided
+nf_save_survey <- function(survey_id,
+                           session_id,
+                           responses,
+                           participant_id = NULL,
+                           project_id = NULL,
+                           device_info = NULL,
+                           response_id = NULL,
+                           conn = NULL) {
+
   created_conn <- FALSE
   if (is.null(conn)) {
-    # Try to get connection string from environment
     conn_string <- Sys.getenv("DATABASE_URL", "")
-    
-    if (conn_string == "") {
-      # Fallback to local defaults for demo
-      tryCatch({
-        conn <- nf_database(
-          dbname = "nomadforms",
-          user = "postgres",
-          password = Sys.getenv("DB_PASSWORD", "password")
-        )
-        created_conn <- TRUE
-      }, error = function(e) {
-        warning("Could not connect to database. Responses will only be logged.")
-        return(list(
-          success = FALSE,
-          message = "Database not connected. See console for response data.",
-          responses = responses
-        ))
-      })
-    } else {
-      conn <- nf_database(connection_string = conn_string)
-      created_conn <- TRUE
+    conn <- tryCatch({
+      if (conn_string != "") nf_database(connection_string = conn_string)
+      else nf_database(dbname = Sys.getenv("DB_NAME", "nomadforms"),
+                       user = Sys.getenv("DB_USER", "nomadforms"),
+                       password = Sys.getenv("DB_PASSWORD", "nomadforms"),
+                       host = Sys.getenv("DB_HOST", "localhost"),
+                       port = as.integer(Sys.getenv("DB_PORT", "5432")))
+    }, error = function(e) NULL)
+
+    if (is.null(conn)) {
+      return(list(success = FALSE,
+                  message = "Database not connected.",
+                  responses = responses))
     }
+    created_conn <- TRUE
   }
-  
-  # Save each response
-  response_ids <- list()
-  
+  if (created_conn) on.exit(try(DBI::dbDisconnect(conn), silent = TRUE), add = TRUE)
+
   tryCatch({
-    for (question_id in names(responses)) {
-      response_value <- responses[[question_id]]
-      
-      # Convert to string
-      if (is.list(response_value)) {
-        response_value <- jsonlite::toJSON(response_value, auto_unbox = TRUE)
-      } else if (length(response_value) > 1) {
-        response_value <- paste(response_value, collapse = ", ")
-      }
-      
-      # Save to database
-      response_id <- nf_save_response(
-        conn = conn,
-        project_id = project_id,
-        session_id = session_id,
-        question_id = question_id,
-        response_value = as.character(response_value),
-        participant_id = participant_id,
-        page_id = page_id,
-        metadata = metadata
-      )
-      
-      response_ids[[question_id]] <- response_id
-    }
-    
-    # Close connection if we created it
-    if (created_conn) {
-      DBI::dbDisconnect(conn)
-    }
-    
-    return(list(
-      success = TRUE,
-      message = "Survey responses saved successfully",
-      response_ids = response_ids,
-      session_id = session_id
-    ))
-    
+    id <- nf_save_submission(conn, survey_id = survey_id, session_id = session_id,
+                             responses = responses, participant_id = participant_id,
+                             project_id = project_id, device_info = device_info,
+                             response_id = response_id)
+    list(success = TRUE, message = "Survey submission saved",
+         response_id = id, session_id = session_id)
   }, error = function(e) {
-    if (created_conn && !is.null(conn)) {
-      try(DBI::dbDisconnect(conn), silent = TRUE)
-    }
-    
-    return(list(
-      success = FALSE,
-      message = paste("Error saving responses:", e$message),
-      responses = responses
-    ))
+    list(success = FALSE,
+         message = paste("Error saving submission:", e$message),
+         responses = responses)
   })
 }
 
 
-#' Get Responses for Session
+#' Get Responses for a Session
 #'
-#' Retrieves all responses for a given session
+#' Retrieves the long-format answers for a session from the `answers` view.
 #'
 #' @param session_id Session identifier
 #' @param conn Optional database connection
 #'
-#' @return Data frame of responses
+#' @return Data frame of answers (question_id, response_value, ...)
 #' @export
 nf_get_responses <- function(session_id, conn = NULL) {
-  
+
   created_conn <- FALSE
   if (is.null(conn)) {
     conn_string <- Sys.getenv("DATABASE_URL", "")
-    if (conn_string != "") {
-      conn <- nf_database(connection_string = conn_string)
-      created_conn <- TRUE
-    } else {
-      stop("No database connection provided")
-    }
+    if (conn_string == "") stop("No database connection provided")
+    conn <- nf_database(connection_string = conn_string)
+    created_conn <- TRUE
   }
-  
-  tryCatch({
-    responses <- DBI::dbGetQuery(conn, "
-      SELECT 
-        question_id,
-        response_value,
-        created_at,
-        updated_at
-      FROM responses
-      WHERE session_id = $1
-      ORDER BY created_at
-    ", params = list(session_id))
-    
-    if (created_conn) {
-      DBI::dbDisconnect(conn)
-    }
-    
-    return(responses)
-    
-  }, error = function(e) {
-    if (created_conn && !is.null(conn)) {
-      try(DBI::dbDisconnect(conn), silent = TRUE)
-    }
-    stop(paste("Error retrieving responses:", e$message))
-  })
+  if (created_conn) on.exit(try(DBI::dbDisconnect(conn), silent = TRUE), add = TRUE)
+
+  DBI::dbGetQuery(conn, "
+    SELECT question_id, response_value, submitted_at
+    FROM answers WHERE session_id = $1
+    ORDER BY submitted_at, question_id
+  ", params = list(session_id))
 }
 
 
-#' Export Responses to CSV
+#' Export a Survey's Responses to CSV (from the database)
 #'
-#' Exports all responses for a project to CSV format
+#' Reads a survey's answers from the `answers` view and writes a wide CSV, one
+#' row per submission. For exporting an in-memory data frame instead, see
+#' [nf_export_csv()].
 #'
-#' @param project_id Project UUID
+#' @param survey_id Survey identifier
 #' @param filename Output filename
 #' @param conn Optional database connection
 #'
-#' @return Path to created file
+#' @return Path to the created file
 #' @export
-nf_export_csv <- function(project_id, filename = "survey_export.csv", conn = NULL) {
-  
+nf_export_survey_csv <- function(survey_id, filename = "survey_export.csv", conn = NULL) {
+
   created_conn <- FALSE
   if (is.null(conn)) {
     conn_string <- Sys.getenv("DATABASE_URL", "")
-    if (conn_string != "") {
-      conn <- nf_database(connection_string = conn_string)
-      created_conn <- TRUE
-    } else {
-      stop("No database connection provided")
-    }
+    if (conn_string == "") stop("No database connection provided")
+    conn <- nf_database(connection_string = conn_string)
+    created_conn <- TRUE
   }
-  
-  tryCatch({
-    # Get responses in wide format
-    responses <- DBI::dbGetQuery(conn, "
-      SELECT 
-        session_id,
-        participant_id,
-        question_id,
-        response_value,
-        created_at
-      FROM responses
-      WHERE project_id = $1
-      ORDER BY session_id, created_at
-    ", params = list(project_id))
-    
-    if (nrow(responses) == 0) {
-      stop("No responses found for this project")
-    }
-    
-    # Pivot to wide format
-    wide_data <- tidyr::pivot_wider(
-      responses,
-      id_cols = c(session_id, participant_id, created_at),
-      names_from = question_id,
-      values_from = response_value
-    )
-    
-    # Write to CSV
-    write.csv(wide_data, filename, row.names = FALSE)
-    
-    if (created_conn) {
-      DBI::dbDisconnect(conn)
-    }
-    
-    message(paste("Exported", nrow(wide_data), "responses to", filename))
-    return(filename)
-    
-  }, error = function(e) {
-    if (created_conn && !is.null(conn)) {
-      try(DBI::dbDisconnect(conn), silent = TRUE)
-    }
-    stop(paste("Error exporting data:", e$message))
-  })
-}
+  if (created_conn) on.exit(try(DBI::dbDisconnect(conn), silent = TRUE), add = TRUE)
 
+  long <- DBI::dbGetQuery(conn, "
+    SELECT submission_id, session_id, participant_id, submitted_at,
+           question_id, response_value
+    FROM answers WHERE survey_id = $1
+    ORDER BY submission_id, question_id
+  ", params = list(survey_id))
+
+  if (nrow(long) == 0) stop("No responses found for this survey")
+
+  # Pivot long -> wide in base R (no tidyr dependency).
+  ids <- unique(long$submission_id)
+  questions <- unique(long$question_id)
+  wide <- data.frame(submission_id = ids, stringsAsFactors = FALSE)
+  meta <- long[!duplicated(long$submission_id),
+               c("submission_id", "session_id", "participant_id", "submitted_at")]
+  wide <- merge(wide, meta, by = "submission_id")
+  for (q in questions) {
+    sub <- long[long$question_id == q, c("submission_id", "response_value")]
+    wide[[q]] <- sub$response_value[match(wide$submission_id, sub$submission_id)]
+  }
+
+  utils::write.csv(wide, filename, row.names = FALSE, na = "")
+  message(paste("Exported", nrow(wide), "submissions to", filename))
+  filename
+}

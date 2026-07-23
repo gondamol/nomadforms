@@ -22,7 +22,6 @@ RUN install2.r --error --skipinstalled \
         RPostgres \
         jsonlite \
         htmltools \
-        digest \
         plumber \
         testthat
 

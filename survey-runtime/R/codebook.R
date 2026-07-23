@@ -291,5 +291,4 @@ generate_ui_code <- function(questions) {
 
 
 # Helper: null coalescing operator
-`%||%` <- function(a, b) if (is.null(a) || is.na(a) || nchar(a) == 0) b else a
 

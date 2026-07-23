@@ -34,11 +34,19 @@ nf_question <- function(id,
                         max = NULL,
                         help_text = NULL) {
   
+  # This helper builds Shiny inputs for the optional Shiny/Quarto demo path.
+  # The mobile PWA collection path does not use it, so shiny is a Suggests
+  # dependency rather than a hard Import.
+  if (!requireNamespace("shiny", quietly = TRUE)) {
+    stop("Package 'shiny' is required for nf_question(). Install it with ",
+         "install.packages('shiny'), or use the PWA collection path.")
+  }
+
   # Add required indicator to label
   if (required) {
     label <- htmltools::HTML(paste0(label, ' <span style="color:red;">*</span>'))
   }
-  
+
   # Create question based on type
   question_ui <- switch(type,
     "text" = shiny::textInput(id, label),

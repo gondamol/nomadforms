@@ -266,5 +266,4 @@ nf_validate_cross_field <- function(responses, rules) {
 }
 
 # Helper: null coalescing operator
-`%||%` <- function(a, b) if (is.null(a)) b else a
 
