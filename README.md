@@ -65,41 +65,48 @@ Visual Builder (React) → Generates Code (Quarto + R)
 **Mobile**: Progressive Web App (PWA)  
 **Database**: PostgreSQL (Supabase or self-hosted)
 
-## 📦 Quick Start
+## 📦 Quick Start (one command)
 
-### Try the Demo (5 minutes)
+Requires Docker. Brings up PostgreSQL + the API and runs migrations
+automatically.
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/gondamol/nomadforms.git
 cd nomadforms
+docker compose up --build
 
-# 2. Install R packages
-R -e 'install.packages(c("shiny", "DBI", "RPostgres", "jsonlite", "htmltools"))'
-
-# 3. Run the demo
-cd examples/demo-survey
-quarto preview survey.qmd
+# optional: create a demo survey to collect against
+./database/seed.sh
 ```
 
-**See**: `TESTING.md` for detailed testing instructions including mobile testing.
+Then open:
 
-### Current Features (Phase 1 - 40% Complete)
+- **Mobile collect app:** http://localhost:8000/app/
+- **From a phone on the same Wi-Fi:** `http://<your-computer-ip>:8000/app/`
+- **API docs (Swagger):** http://localhost:8000/__docs__/
 
-✅ **Working Now**:
-- 7 question types (text, numeric, radio, checkbox, select, slider, textarea)
-- Mobile-responsive design (works on phones, tablets, desktops)
-- Touch-optimized controls (44px minimum touch targets)
-- Field validation (required fields, ranges, types)
-- Success/error notifications
-- Session tracking
+For production, copy `.env.example` to `.env`, set a strong `DB_PASSWORD`,
+set `API_KEY` to require auth on writes, and set `CORS_ORIGIN`.
 
-⏸️ **Coming Soon**:
-- Database persistence (PostgreSQL/Supabase)
-- Offline capability (PWA + IndexedDB)
-- Visual survey builder
-- REDCap codebook import
-- Data export (Stata, SPSS, R)
+**See** `FINAL_REPORT.md` for exactly what works, `DECISIONS.md` for the
+architecture rationale, and `TESTING.md` for mobile testing.
+
+### Current Features
+
+✅ **Working now** (verified end-to-end):
+- Mobile PWA data collection: offline-first, auto-save, resume draft, GPS,
+  14 question types, idempotent sync
+- REST API: surveys, submit, batch sync, list (search/filter/paginate),
+  analytics, approve/reject/delete/restore with audit log
+- Export: CSV and JSON over HTTP
+- PostgreSQL with a single canonical data model (`submissions` + `answers` view)
+- One-command Docker deployment, OpenAPI docs, CI (R tests + API e2e)
+
+⏸️ **Not yet built** (see `FINAL_REPORT.md` for the full list):
+- Visual (drag-and-drop) survey builder — surveys are authored via the API
+- User accounts and role enforcement
+- Charts/maps dashboard UI; Stata/SPSS/Excel/PDF export over HTTP
+- Photo/video/audio/signature capture in the collect page
 
 ## 🤝 Contributing
 
