@@ -80,6 +80,15 @@ nf_database <- function(host = "localhost",
 #'
 #' @return TRUE if successful
 #' @export
+#' @examples
+#' \dontrun{
+#' conn <- nf_database(
+#'   dbname = "nomadforms",
+#'   user = "postgres",
+#'   password = "password"
+#' )
+#' nf_init_schema(conn)
+#' }
 nf_init_schema <- function(conn) {
 
   # Survey definitions.
@@ -160,6 +169,16 @@ nf_init_schema <- function(conn) {
 #'
 #' @return Submission UUID
 #' @export
+#' @examples
+#' \dontrun{
+#' conn <- nf_database(connection_string = Sys.getenv("DATABASE_URL"))
+#' nf_save_submission(
+#'   conn,
+#'   survey_id = "household_survey",
+#'   session_id = "session-001",
+#'   responses = list(age = 34, county = "Turkana")
+#' )
+#' }
 nf_save_submission <- function(conn,
                                survey_id,
                                session_id,

@@ -21,6 +21,39 @@ jobs:
       - name: Run tests
         run: Rscript -e 'testthat::test_dir("survey-runtime/tests/testthat", stop_on_failure = TRUE)'
 
+  r-cmd-check:
+    name: R CMD check (--as-cran)
+    runs-on: ubuntu-latest
+    container: rocker/r-ver:4.4.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: System dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            libpq-dev libxml2-dev libcurl4-openssl-dev libssl-dev qpdf pandoc
+      - name: Install package and check dependencies
+        run: |
+          install2.r --error DBI jsonlite htmltools \
+            RPostgres shiny haven openxlsx testthat roxygen2
+      - name: Regenerate documentation and fail if it is stale
+        run: |
+          Rscript -e 'roxygen2::roxygenise("survey-runtime")'
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if [ -n "$(git status --porcelain survey-runtime/man survey-runtime/NAMESPACE)" ]; then
+            echo "man/ or NAMESPACE is out of date; run roxygen2::roxygenise('survey-runtime')."
+            git --no-pager diff -- survey-runtime/man survey-runtime/NAMESPACE
+            exit 1
+          fi
+      - name: Build source tarball
+        run: R CMD build survey-runtime
+      - name: Check as CRAN
+        env:
+          _R_CHECK_CRAN_INCOMING_REMOTE_: "false"
+        run: R CMD check --as-cran --no-manual nomadforms_*.tar.gz
+      - name: Show check log on failure
+        if: failure()
+        run: cat nomadforms.Rcheck/00check.log || true
+
   api-e2e:
     name: API end-to-end
     runs-on: ubuntu-latest

@@ -15,6 +15,11 @@ NULL
 #'
 #' @return Path to created file
 #' @export
+#' @examples
+#' data <- data.frame(id = 1:3, age = c(25, 40, 31), county = c("Turkana", "Wajir", "Marsabit"))
+#' path <- file.path(tempdir(), "survey_export.csv")
+#' nf_export_csv(data, path)
+#' unlink(path)
 nf_export_csv <- function(data, filename = "survey_export.csv", include_metadata = TRUE) {
   if (!include_metadata) {
     # Remove metadata columns
@@ -22,8 +27,8 @@ nf_export_csv <- function(data, filename = "survey_export.csv", include_metadata
     data <- data[, !(names(data) %in% metadata_cols), drop = FALSE]
   }
   
-  write.csv(data, filename, row.names = FALSE, fileEncoding = "UTF-8")
-  message(paste("✓ Exported", nrow(data), "responses to", filename))
+  utils::write.csv(data, filename, row.names = FALSE, fileEncoding = "UTF-8")
+  message(paste("Exported", nrow(data), "responses to", filename))
   return(normalizePath(filename))
 }
 
@@ -38,6 +43,13 @@ nf_export_csv <- function(data, filename = "survey_export.csv", include_metadata
 #'
 #' @return Path to created file
 #' @export
+#' @examples
+#' if (requireNamespace("openxlsx", quietly = TRUE)) {
+#'   data <- data.frame(id = 1:3, age = c(25, 40, 31))
+#'   path <- file.path(tempdir(), "survey_export.xlsx")
+#'   nf_export_excel(data, path)
+#'   unlink(path)
+#' }
 nf_export_excel <- function(data, filename = "survey_export.xlsx", include_metadata = TRUE) {
   if (!requireNamespace("openxlsx", quietly = TRUE)) {
     stop("Package 'openxlsx' is required for Excel export. Install it with: install.packages('openxlsx')")
@@ -59,7 +71,7 @@ nf_export_excel <- function(data, filename = "survey_export.xlsx", include_metad
                      rows = 1, cols = 1:ncol(data), gridExpand = TRUE)
   
   openxlsx::saveWorkbook(wb, filename, overwrite = TRUE)
-  message(paste("✓ Exported", nrow(data), "responses to", filename))
+  message(paste("Exported", nrow(data), "responses to", filename))
   return(normalizePath(filename))
 }
 
@@ -74,6 +86,13 @@ nf_export_excel <- function(data, filename = "survey_export.xlsx", include_metad
 #'
 #' @return Path to created file
 #' @export
+#' @examples
+#' if (requireNamespace("haven", quietly = TRUE)) {
+#'   df <- data.frame(id = 1:2, score = c(4.5, 3.2))
+#'   path <- file.path(tempdir(), "example.dta")
+#'   nf_export_stata(df, path)
+#'   unlink(path)
+#' }
 nf_export_stata <- function(data, filename = "survey_export.dta", version = 14) {
   if (!requireNamespace("haven", quietly = TRUE)) {
     stop("Package 'haven' is required for Stata export. Install it with: install.packages('haven')")
@@ -86,7 +105,7 @@ nf_export_stata <- function(data, filename = "survey_export.dta", version = 14) 
   }
   
   haven::write_dta(data, filename, version = version)
-  message(paste("✓ Exported", nrow(data), "responses to", filename, "(Stata", version, "format)"))
+  message(paste("Exported", nrow(data), "responses to", filename, "(Stata", version, "format)"))
   return(normalizePath(filename))
 }
 
@@ -100,13 +119,20 @@ nf_export_stata <- function(data, filename = "survey_export.dta", version = 14) 
 #'
 #' @return Path to created file
 #' @export
+#' @examples
+#' if (requireNamespace("haven", quietly = TRUE)) {
+#'   df <- data.frame(id = 1:2, score = c(4.5, 3.2))
+#'   path <- file.path(tempdir(), "example.sav")
+#'   nf_export_spss(df, path)
+#'   unlink(path)
+#' }
 nf_export_spss <- function(data, filename = "survey_export.sav") {
   if (!requireNamespace("haven", quietly = TRUE)) {
     stop("Package 'haven' is required for SPSS export. Install it with: install.packages('haven')")
   }
   
   haven::write_sav(data, filename)
-  message(paste("✓ Exported", nrow(data), "responses to", filename))
+  message(paste("Exported", nrow(data), "responses to", filename))
   return(normalizePath(filename))
 }
 
@@ -121,9 +147,14 @@ nf_export_spss <- function(data, filename = "survey_export.sav") {
 #'
 #' @return Path to created file
 #' @export
+#' @examples
+#' data <- data.frame(id = 1:3, age = c(25, 40, 31))
+#' path <- file.path(tempdir(), "survey_export.rds")
+#' nf_export_rds(data, path)
+#' unlink(path)
 nf_export_rds <- function(data, filename = "survey_export.rds", compress = "xz") {
   saveRDS(data, filename, compress = compress)
-  message(paste("✓ Exported", nrow(data), "responses to", filename))
+  message(paste("Exported", nrow(data), "responses to", filename))
   return(normalizePath(filename))
 }
 
@@ -139,6 +170,16 @@ nf_export_rds <- function(data, filename = "survey_export.rds", compress = "xz")
 #'
 #' @return Path to created file
 #' @export
+#' @examples
+#' data <- data.frame(id = 1:3, sex = c(1, 2, 1))
+#' codebook <- data.frame(
+#'   question_id = c("sex", "sex"),
+#'   code = c(1, 2),
+#'   label = c("Male", "Female")
+#' )
+#' path <- file.path(tempdir(), "survey_export_labeled.csv")
+#' nf_export_labeled(data, codebook, format = "csv", filename = path)
+#' unlink(path)
 nf_export_labeled <- function(data, codebook, format = "csv", filename = NULL) {
   # Apply labels from codebook
   for (i in seq_len(nrow(codebook))) {
@@ -185,10 +226,15 @@ nf_export_labeled <- function(data, codebook, format = "csv", filename = NULL) {
 #'
 #' @return Path to created file
 #' @export
+#' @examples
+#' data <- data.frame(id = 1:3, age = c(25, 40, 31))
+#' path <- file.path(tempdir(), "survey_export.json")
+#' nf_export_json(data, path)
+#' unlink(path)
 nf_export_json <- function(data, filename = "survey_export.json", pretty = TRUE) {
   json_str <- jsonlite::toJSON(data, pretty = pretty, auto_unbox = TRUE)
   writeLines(json_str, filename, useBytes = TRUE)
-  message(paste("✓ Exported", nrow(data), "responses to", filename))
+  message(paste("Exported", nrow(data), "responses to", filename))
   return(normalizePath(filename))
 }
 
@@ -204,6 +250,11 @@ nf_export_json <- function(data, filename = "survey_export.json", pretty = TRUE)
 #'
 #' @return Named vector of created file paths
 #' @export
+#' @examples
+#' data <- data.frame(id = 1:3, age = c(25, 40, 31))
+#' out_dir <- file.path(tempdir(), "nf_export_batch_example")
+#' nf_export_batch(data, formats = c("csv", "json"), output_dir = out_dir)
+#' unlink(out_dir, recursive = TRUE)
 nf_export_batch <- function(data, 
                              formats = c("csv", "excel", "stata", "spss"),
                              prefix = "survey_export",
@@ -242,7 +293,7 @@ nf_export_batch <- function(data,
     })
   }
   
-  message(paste("\n✓ Batch export complete!", length(results[!is.na(results)]), "of", length(formats), "formats succeeded"))
+  message(paste("\nBatch export complete!", length(results[!is.na(results)]), "of", length(formats), "formats succeeded"))
   return(unlist(results))
 }
 

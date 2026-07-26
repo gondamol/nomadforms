@@ -39,16 +39,19 @@ shiny::actionButton("submit", "Submit Survey", class = "btn-primary")
 # Handle survey submission
 shiny::observeEvent(input$submit, {
   # Validate required fields
-  name_valid <- nf_validate(input$name, required = TRUE)
-  age_valid <- nf_validate(input$age, required = TRUE, type = "numeric")
-  
+  name_valid <- nf_validate(input$name, rules = list(required = TRUE),
+                            question_label = "Name")
+  age_valid <- nf_validate(input$age,
+                           rules = list(required = TRUE, type = "numeric"),
+                           question_label = "Age")
+
   if (!name_valid$valid) {
-    shiny::showNotification(name_valid$message, type = "error")
+    shiny::showNotification(name_valid$errors[[1]], type = "error")
     return()
   }
-  
+
   if (!age_valid$valid) {
-    shiny::showNotification(age_valid$message, type = "error")
+    shiny::showNotification(age_valid$errors[[1]], type = "error")
     return()
   }
   

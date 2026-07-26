@@ -5,30 +5,51 @@
 #' @name i18n
 NULL
 
-# Global translations storage
+# Global translations storage. Mutable session state lives in environments
+# because namespace bindings are locked once the package is installed.
 .translations <- new.env(parent = emptyenv())
-.current_lang <- "en"
+.nf_state <- new.env(parent = emptyenv())
+.nf_state$current_lang <- "en"
 
 #' Set Current Language
 #'
 #' @param lang Language code (e.g., "en", "es", "fr", "sw")
+#' @return The language code, invisibly.
 #' @export
+#' @examples
+#' old_lang <- nf_get_language()
+#' nf_set_language("es")
+#' nf_get_language()
+#' nf_set_language(old_lang)
 nf_set_language <- function(lang) {
-  .current_lang <<- lang
+  .nf_state$current_lang <- lang
   message(paste("Language set to:", lang))
+  invisible(lang)
 }
 
 #' Get Current Language
+#' @return The current language code as a character string.
 #' @export
+#' @examples
+#' nf_get_language()
 nf_get_language <- function() {
-  .current_lang
+  .nf_state$current_lang
 }
 
 #' Load Translations from JSON
 #'
 #' @param file Path to translations JSON file
 #' @param lang Language code
+#' @return Called for its side effect of parsing \code{file} and registering
+#'   its contents as the translations for \code{lang}. Returns \code{NULL}
+#'   invisibly (the value returned by \code{message()}).
 #' @export
+#' @examples
+#' path <- file.path(tempdir(), "fr_extra.json")
+#' jsonlite::write_json(list(greeting = "Bonjour"), path, auto_unbox = TRUE)
+#' nf_load_translations(path, "fr")
+#' nf_t("greeting", lang = "fr")
+#' unlink(path)
 nf_load_translations <- function(file, lang) {
   translations <- jsonlite::fromJSON(file, simplifyVector = FALSE)
   .translations[[lang]] <- translations
@@ -39,7 +60,12 @@ nf_load_translations <- function(file, lang) {
 #'
 #' @param translations Named list of translations
 #' @param lang Language code
+#' @return The \code{translations} list, invisibly (the value just stored
+#'   in the package's internal translation table).
 #' @export
+#' @examples
+#' nf_add_translations(list(greeting = "Jambo"), "sw")
+#' nf_t("greeting", lang = "sw")
 nf_add_translations <- function(translations, lang) {
   .translations[[lang]] <- translations
 }
@@ -50,10 +76,19 @@ nf_add_translations <- function(translations, lang) {
 #' @param lang Language code (uses current language if NULL)
 #' @param fallback Fallback text if translation not found
 #' @param ... Named arguments for string interpolation
+#' @return A character string: the translated text for \code{key} in
+#'   \code{lang} (or the current language, if \code{lang} is \code{NULL}),
+#'   falling back to \code{fallback} or to \code{key} itself when no
+#'   translation is found. \code{"{name}"} placeholders in the result are
+#'   replaced by any named arguments passed via \code{...}.
 #' @export
+#' @examples
+#' nf_t("common.buttons.submit")
+#' nf_t("common.buttons.submit", lang = "es")
+#' nf_t("survey.progress", percent = 42)
 nf_t <- function(key, lang = NULL, fallback = NULL, ...) {
   if (is.null(lang)) {
-    lang <- .current_lang
+    lang <- .nf_state$current_lang
   }
   
   # Get translations for language
@@ -97,10 +132,18 @@ nf_t <- function(key, lang = NULL, fallback = NULL, ...) {
 #' @param key Translation key
 #' @param count Number for pluralization
 #' @param lang Language code
+#' @return A character string: the translation looked up under
+#'   \code{"<key>.one"} when \code{count} equals 1, or \code{"<key>.other"}
+#'   otherwise, with any \code{"{name}"} placeholders interpolated (including
+#'   \code{"{count}"}).
 #' @export
+#' @examples
+#' nf_add_translations(list(items = list(one = "1 item", other = "{count} items")), "xx")
+#' nf_tn("items", count = 1, lang = "xx")
+#' nf_tn("items", count = 5, lang = "xx")
 nf_tn <- function(key, count, lang = NULL) {
   if (is.null(lang)) {
-    lang <- .current_lang
+    lang <- .nf_state$current_lang
   }
   
   # Get plural form
@@ -110,7 +153,13 @@ nf_tn <- function(key, count, lang = NULL) {
 }
 
 #' Built-in English Translations
+#' @return A nested named list of English translation strings, organized
+#'   under \code{common}, \code{survey}, and \code{validation}, suitable for
+#'   passing to \code{\link{nf_add_translations}}.
 #' @export
+#' @examples
+#' en <- nf_default_translations_en()
+#' en$common$buttons$submit
 nf_default_translations_en <- function() {
   list(
     common = list(
@@ -169,7 +218,13 @@ nf_default_translations_en <- function() {
 }
 
 #' Built-in Spanish Translations
+#' @return A nested named list of Spanish translation strings, organized
+#'   under \code{common} and \code{survey}, suitable for passing to
+#'   \code{\link{nf_add_translations}}.
 #' @export
+#' @examples
+#' es <- nf_default_translations_es()
+#' es$common$buttons$submit
 nf_default_translations_es <- function() {
   list(
     common = list(
@@ -192,25 +247,25 @@ nf_default_translations_es <- function() {
         saving = "Guardando...",
         saved = "Guardado",
         error = "Error",
-        success = "Éxito"
+        success = "\u00c9xito"
       ),
       messages = list(
         required_field = "Este campo es obligatorio",
-        invalid_email = "Por favor, introduzca una dirección de correo electrónico válida",
-        invalid_phone = "Por favor, introduzca un número de teléfono válido",
-        invalid_url = "Por favor, introduzca una URL válida",
+        invalid_email = "Por favor, introduzca una direcci\u00f3n de correo electr\u00f3nico v\u00e1lida",
+        invalid_phone = "Por favor, introduzca un n\u00famero de tel\u00e9fono v\u00e1lido",
+        invalid_url = "Por favor, introduzca una URL v\u00e1lida",
         save_success = "Guardado correctamente",
         save_error = "Error al guardar datos",
-        network_error = "Error de red. Por favor, inténtelo de nuevo.",
-        offline_mode = "Está sin conexión. Las respuestas se guardarán localmente.",
-        online_mode = "Está en línea. Las respuestas se sincronizarán.",
+        network_error = "Error de red. Por favor, int\u00e9ntelo de nuevo.",
+        offline_mode = "Est\u00e1 sin conexi\u00f3n. Las respuestas se guardar\u00e1n localmente.",
+        online_mode = "Est\u00e1 en l\u00ednea. Las respuestas se sincronizar\u00e1n.",
         sync_success = "Datos sincronizados correctamente",
         sync_error = "Error al sincronizar datos"
       )
     ),
     survey = list(
       progress = "Progreso: {percent}%",
-      page_of = "Página {current} de {total}",
+      page_of = "P\u00e1gina {current} de {total}",
       question_of = "Pregunta {current} de {total}",
       questions_answered = "{answered} de {total} preguntas respondidas",
       time_remaining = "Tiempo restante estimado: {minutes} minutos"
@@ -219,7 +274,13 @@ nf_default_translations_es <- function() {
 }
 
 #' Built-in French Translations
+#' @return A nested named list of French translation strings, organized
+#'   under \code{common} and \code{survey}, suitable for passing to
+#'   \code{\link{nf_add_translations}}.
 #' @export
+#' @examples
+#' fr <- nf_default_translations_fr()
+#' fr$common$buttons$submit
 nf_default_translations_fr <- function() {
   list(
     common = list(
@@ -229,47 +290,53 @@ nf_default_translations_fr <- function() {
         save = "Enregistrer",
         save_draft = "Enregistrer le brouillon",
         `next` = "Suivant",
-        previous = "Précédent",
+        previous = "Pr\u00e9c\u00e9dent",
         finish = "Terminer",
         clear = "Effacer",
         undo = "Annuler",
-        upload = "Télécharger"
+        upload = "T\u00e9l\u00e9charger"
       ),
       labels = list(
         required = "Requis",
         optional = "Facultatif",
         loading = "Chargement...",
         saving = "Enregistrement...",
-        saved = "Enregistré",
+        saved = "Enregistr\u00e9",
         error = "Erreur",
-        success = "Succès"
+        success = "Succ\u00e8s"
       ),
       messages = list(
         required_field = "Ce champ est obligatoire",
         invalid_email = "Veuillez entrer une adresse e-mail valide",
-        invalid_phone = "Veuillez entrer un numéro de téléphone valide",
+        invalid_phone = "Veuillez entrer un num\u00e9ro de t\u00e9l\u00e9phone valide",
         invalid_url = "Veuillez entrer une URL valide",
-        save_success = "Enregistré avec succès",
-        save_error = "Erreur lors de l'enregistrement des données",
-        network_error = "Erreur réseau. Veuillez réessayer.",
-        offline_mode = "Vous êtes hors ligne. Les réponses seront enregistrées localement.",
-        online_mode = "Vous êtes en ligne. Les réponses seront synchronisées.",
-        sync_success = "Données synchronisées avec succès",
-        sync_error = "Erreur lors de la synchronisation des données"
+        save_success = "Enregistr\u00e9 avec succ\u00e8s",
+        save_error = "Erreur lors de l'enregistrement des donn\u00e9es",
+        network_error = "Erreur r\u00e9seau. Veuillez r\u00e9essayer.",
+        offline_mode = "Vous \u00eates hors ligne. Les r\u00e9ponses seront enregistr\u00e9es localement.",
+        online_mode = "Vous \u00eates en ligne. Les r\u00e9ponses seront synchronis\u00e9es.",
+        sync_success = "Donn\u00e9es synchronis\u00e9es avec succ\u00e8s",
+        sync_error = "Erreur lors de la synchronisation des donn\u00e9es"
       )
     ),
     survey = list(
-      progress = "Progrès: {percent}%",
+      progress = "Progr\u00e8s: {percent}%",
       page_of = "Page {current} sur {total}",
       question_of = "Question {current} sur {total}",
-      questions_answered = "{answered} sur {total} questions répondues",
-      time_remaining = "Temps restant estimé: {minutes} minutes"
+      questions_answered = "{answered} sur {total} questions r\u00e9pondues",
+      time_remaining = "Temps restant estim\u00e9: {minutes} minutes"
     )
   )
 }
 
 #' Built-in Swahili Translations
+#' @return A nested named list of Swahili translation strings, organized
+#'   under \code{common} and \code{survey}, suitable for passing to
+#'   \code{\link{nf_add_translations}}.
 #' @export
+#' @examples
+#' sw <- nf_default_translations_sw()
+#' sw$common$buttons$submit
 nf_default_translations_sw <- function() {
   list(
     common = list(
@@ -319,7 +386,15 @@ nf_default_translations_sw <- function() {
 }
 
 #' Initialize Default Translations
+#' @return Called for its side effect of loading the built-in English,
+#'   Spanish, French, and Swahili translations into the package's
+#'   translation store (overwriting any existing translations already
+#'   registered for those four language codes). Returns \code{NULL}
+#'   invisibly (the value returned by \code{message()}).
 #' @export
+#' @examples
+#' nf_init_i18n()
+#' nf_t("common.buttons.submit", lang = "fr")
 nf_init_i18n <- function() {
   nf_add_translations(nf_default_translations_en(), "en")
   nf_add_translations(nf_default_translations_es(), "es")
@@ -335,9 +410,16 @@ nf_init_i18n <- function() {
 #'
 #' @param languages Named vector of language codes and names
 #' @param default_lang Default language
+#' @return An \code{htmltools} tag object containing a language \code{<select>}
+#'   dropdown with its supporting label and script, ready to be included in a
+#'   Shiny UI or R Markdown/Quarto HTML document.
 #' @export
-nf_language_selector <- function(languages = c("en" = "English", "es" = "Español", 
-                                                "fr" = "Français", "sw" = "Kiswahili"),
+#' @examples
+#' nf_language_selector()
+#' nf_language_selector(languages = c("en" = "English", "sw" = "Kiswahili"),
+#'                       default_lang = "sw")
+nf_language_selector <- function(languages = c("en" = "English", "es" = "Espa\u00f1ol",
+                                                "fr" = "Fran\u00e7ais", "sw" = "Kiswahili"),
                                   default_lang = "en") {
   htmltools::tags$div(
     class = "language-selector",

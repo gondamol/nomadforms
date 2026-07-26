@@ -15,15 +15,12 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Text question
-#' nf_question("name", "text", "What is your name?", required = TRUE)
+#' if (requireNamespace("shiny", quietly = TRUE)) {
+#'   # Numeric with range
+#'   nf_question("age", "numeric", "Age", min = 0, max = 120, required = TRUE)
 #'
-#' # Radio buttons
-#' nf_question("gender", "radio", "Gender", choices = c("Male", "Female", "Other"))
-#'
-#' # Numeric with range
-#' nf_question("age", "numeric", "Age", min = 0, max = 120, required = TRUE)
+#'   # Radio buttons
+#'   nf_question("gender", "radio", "Gender", choices = c("Male", "Female", "Other"))
 #' }
 nf_question <- function(id,
                         type = "text",
@@ -68,46 +65,5 @@ nf_question <- function(id,
   }
   
   return(question_ui)
-}
-
-
-#' Validate Question Response
-#'
-#' Validates a question response based on its requirements.
-#'
-#' @param value Response value
-#' @param required Is the question required?
-#' @param type Question type
-#' @param min Minimum value (for numeric/slider)
-#' @param max Maximum value (for numeric/slider)
-#'
-#' @return List with valid (TRUE/FALSE) and message (error message if invalid)
-#' @export
-nf_validate <- function(value, required = FALSE, type = "text", min = NULL, max = NULL) {
-  
-  # Check if required and empty
-  if (required && (is.null(value) || length(value) == 0 || value == "")) {
-    return(list(valid = FALSE, message = "This question is required"))
-  }
-  
-  # Skip validation if not required and empty
-  if (!required && (is.null(value) || length(value) == 0 || value == "")) {
-    return(list(valid = TRUE, message = NULL))
-  }
-  
-  # Type-specific validation
-  if (type %in% c("numeric", "slider")) {
-    if (!is.numeric(value)) {
-      return(list(valid = FALSE, message = "Please enter a valid number"))
-    }
-    if (!is.null(min) && value < min) {
-      return(list(valid = FALSE, message = paste("Value must be at least", min)))
-    }
-    if (!is.null(max) && value > max) {
-      return(list(valid = FALSE, message = paste("Value must be at most", max)))
-    }
-  }
-  
-  return(list(valid = TRUE, message = NULL))
 }
 

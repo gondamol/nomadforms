@@ -15,6 +15,10 @@ NULL
 #'
 #' @return Logical indicating whether to show the question
 #' @export
+#' @examples
+#' responses <- list(age = 25)
+#' nf_skip_logic("age >= 18", responses)
+#' nf_skip_logic(function(r) r$age >= 18, responses)
 nf_skip_logic <- function(condition, responses, default = TRUE) {
   tryCatch({
     if (is.function(condition)) {
@@ -48,6 +52,8 @@ nf_skip_logic <- function(condition, responses, default = TRUE) {
 #'
 #' @return Skip logic rule object
 #' @export
+#' @examples
+#' nf_skip_rule(show_if = "age >= 18")
 nf_skip_rule <- function(show_if = NULL, hide_if = NULL) {
   if (!is.null(show_if) && !is.null(hide_if)) {
     stop("Specify either show_if or hide_if, not both")
@@ -69,6 +75,12 @@ nf_skip_rule <- function(show_if = NULL, hide_if = NULL) {
 #'
 #' @return Named list of question_id -> should_show (logical)
 #' @export
+#' @examples
+#' questions <- list(
+#'   age = list(),
+#'   drink = list(skip_logic = nf_skip_rule(show_if = "age >= 18"))
+#' )
+#' nf_apply_skip_logic(questions, list(age = 25))
 nf_apply_skip_logic <- function(questions, responses) {
   results <- list()
   
@@ -109,6 +121,9 @@ NULL
 #' @param value Value to compare against
 #' @return Skip logic function
 #' @export
+#' @examples
+#' show_drink <- nf_show_if_equals("age_group", "adult")
+#' show_drink(list(age_group = "adult"))
 nf_show_if_equals <- function(previous_question_id, value) {
   function(responses) {
     previous_value <- responses[[previous_question_id]]
@@ -123,6 +138,9 @@ nf_show_if_equals <- function(previous_question_id, value) {
 #' @param values Vector of values to check
 #' @return Skip logic function
 #' @export
+#' @examples
+#' show_followup <- nf_show_if_in("country", c("KE", "UG", "TZ"))
+#' show_followup(list(country = "KE"))
 nf_show_if_in <- function(previous_question_id, values) {
   function(responses) {
     previous_value <- responses[[previous_question_id]]
@@ -139,6 +157,9 @@ nf_show_if_in <- function(previous_question_id, values) {
 #' @param value Value to check for
 #' @return Skip logic function
 #' @export
+#' @examples
+#' show_other <- nf_show_if_contains("symptoms", "other")
+#' show_other(list(symptoms = c("fever", "other")))
 nf_show_if_contains <- function(previous_question_id, value) {
   function(responses) {
     previous_value <- responses[[previous_question_id]]
@@ -153,6 +174,9 @@ nf_show_if_contains <- function(previous_question_id, value) {
 #' @param threshold Threshold value
 #' @return Skip logic function
 #' @export
+#' @examples
+#' show_adult_q <- nf_show_if_greater("age", 17)
+#' show_adult_q(list(age = 25))
 nf_show_if_greater <- function(previous_question_id, threshold) {
   function(responses) {
     previous_value <- responses[[previous_question_id]]
@@ -167,6 +191,9 @@ nf_show_if_greater <- function(previous_question_id, threshold) {
 #' @param threshold Threshold value
 #' @return Skip logic function
 #' @export
+#' @examples
+#' show_minor_q <- nf_show_if_less("age", 18)
+#' show_minor_q(list(age = 12))
 nf_show_if_less <- function(previous_question_id, threshold) {
   function(responses) {
     previous_value <- responses[[previous_question_id]]
@@ -180,6 +207,12 @@ nf_show_if_less <- function(previous_question_id, threshold) {
 #' @param ... Skip logic functions or expressions
 #' @return Skip logic function
 #' @export
+#' @examples
+#' show_q <- nf_show_if_all(
+#'   nf_show_if_greater("age", 17),
+#'   nf_show_if_equals("consent", TRUE)
+#' )
+#' show_q(list(age = 25, consent = TRUE))
 nf_show_if_all <- function(...) {
   conditions <- list(...)
   function(responses) {
@@ -200,6 +233,12 @@ nf_show_if_all <- function(...) {
 #' @param ... Skip logic functions or expressions
 #' @return Skip logic function
 #' @export
+#' @examples
+#' show_q <- nf_show_if_any(
+#'   nf_show_if_equals("country", "KE"),
+#'   nf_show_if_equals("country", "UG")
+#' )
+#' show_q(list(country = "UG"))
 nf_show_if_any <- function(...) {
   conditions <- list(...)
   function(responses) {
@@ -228,6 +267,8 @@ nf_show_if_any <- function(...) {
 #' @param condition A single-line string condition
 #' @return A JavaScript boolean expression as a string
 #' @export
+#' @examples
+#' nf_condition_to_js("age >= 18 && county == 'Turkana'")
 nf_condition_to_js <- function(condition) {
   if (is.null(condition) || !is.character(condition) || length(condition) != 1) {
     stop("condition must be a single string")
@@ -266,6 +307,8 @@ nf_condition_to_js <- function(condition) {
 #'
 #' @return JavaScript code as string
 #' @export
+#' @examples
+#' nf_skip_logic_js("drink_q", "age >= 18")
 nf_skip_logic_js <- function(question_id, skip_rule) {
   if (is.null(skip_rule)) {
     return("")

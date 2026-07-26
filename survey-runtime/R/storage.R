@@ -15,6 +15,14 @@
 #'
 #' @return List with success status and the submission id
 #' @export
+#' @examples
+#' \dontrun{
+#' nf_save_survey(
+#'   survey_id = "household_survey",
+#'   session_id = "session-001",
+#'   responses = list(age = 34, county = "Turkana")
+#' )
+#' }
 nf_save_survey <- function(survey_id,
                            session_id,
                            responses,
@@ -69,6 +77,10 @@ nf_save_survey <- function(survey_id,
 #'
 #' @return Data frame of answers (question_id, response_value, ...)
 #' @export
+#' @examples
+#' \dontrun{
+#' nf_get_responses("session-001")
+#' }
 nf_get_responses <- function(session_id, conn = NULL) {
 
   created_conn <- FALSE
@@ -100,6 +112,12 @@ nf_get_responses <- function(session_id, conn = NULL) {
 #'
 #' @return Path to the created file
 #' @export
+#' @examples
+#' \dontrun{
+#' path <- file.path(tempdir(), "household_survey_export.csv")
+#' nf_export_survey_csv("household_survey", filename = path)
+#' unlink(path)
+#' }
 nf_export_survey_csv <- function(survey_id, filename = "survey_export.csv", conn = NULL) {
 
   created_conn <- FALSE
