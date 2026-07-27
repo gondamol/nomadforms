@@ -18,6 +18,8 @@ NULL
 #'
 #' @return Shiny input
 #' @export
+#' @examples
+#' nf_gps_location("home_location", "Please share your current location")
 nf_gps_location <- function(id, label, required = FALSE, 
                               show_map = TRUE, high_accuracy = TRUE,
                               timeout = 10000) {
@@ -125,7 +127,7 @@ nf_gps_location <- function(id, label, required = FALSE,
                     <p style=\"margin: 0 0 8px 0;\"><strong><i class=\"fas fa-map-pin\"></i> Coordinates:</strong></p>
                     <p style=\"margin: 0 0 5px 0; font-family: monospace;\">Latitude: ${lat.toFixed(6)}</p>
                     <p style=\"margin: 0 0 5px 0; font-family: monospace;\">Longitude: ${lon.toFixed(6)}</p>
-                    <p style=\"margin: 0 0 5px 0;\"><strong><i class=\"fas fa-crosshairs\"></i> Accuracy:</strong> ±${accuracy.toFixed(0)} meters</p>
+                    <p style=\"margin: 0 0 5px 0;\"><strong><i class=\"fas fa-crosshairs\"></i> Accuracy:</strong> \u00b1${accuracy.toFixed(0)} meters</p>
                     <p style=\"margin: 0;\"><strong><i class=\"fas fa-clock\"></i> Captured:</strong> ${new Date(timestamp).toLocaleString()}</p>
                   </div>
                 `;
@@ -187,6 +189,10 @@ nf_gps_location <- function(id, label, required = FALSE,
 #'
 #' @return Shiny input
 #' @export
+#' @examples
+#' \dontrun{
+#' nf_address_lookup("home_address", "Home address")
+#' }
 nf_address_lookup <- function(id, label, required = FALSE, 
                                 api_key = Sys.getenv("GOOGLE_PLACES_API_KEY"),
                                 placeholder = "Start typing an address...") {
@@ -247,6 +253,10 @@ nf_address_lookup <- function(id, label, required = FALSE,
 #'
 #' @return Distance as numeric
 #' @export
+#' @examples
+#' # Approximate distance from Nairobi to Mombasa, Kenya
+#' nf_distance(-1.2921, 36.8219, -4.0435, 39.6682)
+#' nf_distance(-1.2921, 36.8219, -4.0435, 39.6682, unit = "miles")
 nf_distance <- function(lat1, lon1, lat2, lon2, unit = "km") {
   # Haversine formula
   R <- switch(unit,
@@ -285,6 +295,8 @@ nf_distance <- function(lat1, lon1, lat2, lon2, unit = "km") {
 #'
 #' @return Logical
 #' @export
+#' @examples
+#' nf_within_radius(-1.2921, 36.8219, -1.3000, 36.8000, radius = 5)
 nf_within_radius <- function(lat, lon, center_lat, center_lon, radius, unit = "km") {
   distance <- nf_distance(lat, lon, center_lat, center_lon, unit)
   return(distance <= radius)

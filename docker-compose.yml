@@ -1,0 +1,48 @@
+# NomadForms — one-command startup.
+#
+#   docker compose up --build
+#
+# Then open the mobile collect app at http://localhost:8000/app/
+# and the API docs at http://localhost:8000/__docs__/
+#
+# On a phone on the same Wi-Fi, use http://<your-computer-ip>:8000/app/
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-nomadforms}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-nomadforms}
+      POSTGRES_DB: ${DB_NAME:-nomadforms}
+    volumes:
+      - nomad_pgdata:/var/lib/postgresql/data
+      # Migrations run in filename order on first boot of an empty volume.
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-nomadforms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-nomadforms}
+      DB_PASSWORD: ${DB_PASSWORD:-nomadforms}
+      DB_NAME: ${DB_NAME:-nomadforms}
+      API_PORT: 8000
+      # Set API_KEY in a .env file to require X-API-Key on write endpoints.
+      API_KEY: ${API_KEY:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+
+volumes:
+  nomad_pgdata:

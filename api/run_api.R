@@ -1,44 +1,38 @@
 #!/usr/bin/env Rscript
-#' Run the NomadForms API Server
+#' Run the NomadForms API server.
 #'
-#' This script starts the Plumber API server for NomadForms
+#' CORS and auth are handled by filters inside server.R; this launcher only
+#' locates the API definition, wires up the OpenAPI docs, and starts serving.
 
 library(plumber)
 
-# Get port from environment or use default
-port <- as.integer(Sys.getenv("API_PORT", 8080))
+port <- as.integer(Sys.getenv("API_PORT", "8000"))
 host <- Sys.getenv("API_HOST", "0.0.0.0")
 
-cat("Starting NomadForms API Server...\n")
-cat(sprintf("Server will run on http://%s:%d\n", host, port))
-cat("Press Ctrl+C to stop\n\n")
+# Resolve server.R relative to this script so it works regardless of the
+# process working directory (bare Rscript, Docker /app, etc.).
+this_file <- sub("^--file=", "",
+                 grep("^--file=", commandArgs(FALSE), value = TRUE)[1])
+api_dir <- if (!is.na(this_file)) dirname(normalizePath(this_file)) else getwd()
 
-# Load API
-pr <- plumber::plumb("server.R")
+cat(sprintf("Starting NomadForms API on http://%s:%d\n", host, port))
+cat(sprintf("API docs at http://%s:%d/__docs__/\n", host, port))
 
-# Add CORS headers
-pr$registerHooks(list(
-  preroute = function(req) {
-    # Enable CORS
-    req$headers$`Access-Control-Allow-Origin` <- "*"
-    req$headers$`Access-Control-Allow-Methods` <- "GET, POST, PUT, DELETE, OPTIONS"
-    req$headers$`Access-Control-Allow-Headers` <- "Content-Type, Authorization"
-  }
-))
+pr <- plumber::plumb(file.path(api_dir, "server.R"))
+pr$setDocs(TRUE)
 
-# Add OPTIONS handler for CORS preflight
-pr$handle("OPTIONS", "*", function(req, res) {
-  res$setHeader("Access-Control-Allow-Origin", "*")
-  res$setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-  res$setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-  res$status <- 200
-  return(list())
-})
+# Serve the mobile PWA (collect page, landing, service worker) as static files
+# at /app so a phone can open http://<host>:<port>/app/ and collect data.
+www_dir <- Sys.getenv("WWW_DIR", "")
+if (www_dir == "") {
+  for (cand in c(file.path(api_dir, "..", "www"), "/app/www"))
+    if (dir.exists(cand)) { www_dir <- normalizePath(cand); break }
+}
+if (nzchar(www_dir) && dir.exists(www_dir)) {
+  pr$mount("/app", plumber::PlumberStatic$new(www_dir))
+  cat(sprintf("Serving PWA from %s at http://%s:%d/app/\n", www_dir, host, port))
+} else {
+  cat("No www directory found; PWA static files not served.\n")
+}
 
-# Run server
-pr$run(
-  host = host,
-  port = port,
-  swagger = TRUE  # Enable Swagger UI at /api/__docs__/
-)
-
+pr$run(host = host, port = port)

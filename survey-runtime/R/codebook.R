@@ -14,9 +14,24 @@ NULL
 #'
 #' @return List of question definitions
 #' @export
+#' @examples
+#' csv_lines <- c(
+#'   paste(
+#'     "Variable / Field Name,Field Type,Field Label,",
+#'     "Text Validation Type OR Show Slider Number,",
+#'     "\"Choices, Calculations, OR Slider Labels\",Required Field?",
+#'     sep = ""
+#'   ),
+#'   "age,text,What is your age?,number,,y",
+#'   "county,dropdown,County,,\"1, Turkana | 2, Wajir\",n"
+#' )
+#' path <- file.path(tempdir(), "redcap_dictionary.csv")
+#' writeLines(csv_lines, path)
+#' questions <- nf_import_redcap(path)
+#' unlink(path)
 nf_import_redcap <- function(file, auto_generate = FALSE) {
   # Read CSV
-  codebook <- read.csv(file, stringsAsFactors = FALSE, na.strings = c("", "NA"))
+  codebook <- utils::read.csv(file, stringsAsFactors = FALSE, na.strings = c("", "NA"))
   
   # Initialize questions list
   questions <- list()
@@ -24,14 +39,25 @@ nf_import_redcap <- function(file, auto_generate = FALSE) {
   for (i in seq_len(nrow(codebook))) {
     row <- codebook[i, ]
     
-    # Extract field information
-    field_name <- row$Variable...Field.Name %||% row$field_name
-    field_type <- row$Field.Type %||% row$field_type
-    field_label <- row$Field.Label %||% row$field_label %||% field_name
-    validation <- row$Text.Validation.Type.OR.Show.Slider.Number %||% row$validation %||% ""
-    choices <- row$Choices..Calculations..OR.Slider.Labels %||% row$choices %||% ""
-    required <- tolower(row$Required.Field. %||% row$required %||% "n") == "y"
-    
+    # Extract field information. Empty cells arrive as NA rather than "",
+    # because read.csv() is called with na.strings; `%||%` only catches NULL,
+    # so NA has to be collapsed explicitly or every downstream nchar() test
+    # returns NA and fails inside `if`.
+    field_name <- redcap_chr(row$Variable...Field.Name, row$field_name)
+    field_type <- redcap_chr(row$Field.Type, row$field_type)
+    field_label <- redcap_chr(row$Field.Label, row$field_label, field_name)
+    validation <- redcap_chr(row$Text.Validation.Type.OR.Show.Slider.Number,
+                             row$validation)
+    choices <- redcap_chr(row$Choices..Calculations..OR.Slider.Labels,
+                          row$choices)
+    branching <- redcap_chr(row$Branching.Logic..Show.field.only.if...,
+                            row$branching_logic)
+    required <- identical(tolower(redcap_chr(row$Required.Field., row$required, "n")), "y")
+
+    if (!nzchar(field_name)) {
+      next
+    }
+
     # Parse question definition
     question <- list(
       id = field_name,
@@ -41,13 +67,12 @@ nf_import_redcap <- function(file, auto_generate = FALSE) {
       validation = parse_redcap_validation(validation),
       choices = parse_redcap_choices(choices)
     )
-    
+
     # Add branching logic if present
-    if (!is.null(row$Branching.Logic..Show.field.only.if...) && 
-        nchar(row$Branching.Logic..Show.field.only.if...) > 0) {
-      question$skip_logic <- parse_redcap_branching(row$Branching.Logic..Show.field.only.if...)
+    if (nzchar(branching)) {
+      question$skip_logic <- parse_redcap_branching(branching)
     }
-    
+
     questions[[field_name]] <- question
   }
   
@@ -72,6 +97,21 @@ nf_import_redcap <- function(file, auto_generate = FALSE) {
 #'
 #' @return List of question definitions
 #' @export
+#' @examples
+#' path <- file.path(tempdir(), "codebook.csv")
+#' write.csv(
+#'   data.frame(
+#'     field_name = c("age", "county"),
+#'     field_type = c("integer", "select"),
+#'     field_label = c("Age", "County"),
+#'     choices = c("", "Turkana|Wajir"),
+#'     required = c("yes", "no"),
+#'     stringsAsFactors = FALSE
+#'   ),
+#'   path, row.names = FALSE
+#' )
+#' questions <- nf_import_csv(path)
+#' unlink(path)
 nf_import_csv <- function(file,
                            field_name_col = "field_name",
                            field_type_col = "field_type",
@@ -79,23 +119,28 @@ nf_import_csv <- function(file,
                            choices_col = "choices",
                            required_col = "required") {
   
-  codebook <- read.csv(file, stringsAsFactors = FALSE)
+  codebook <- utils::read.csv(file, stringsAsFactors = FALSE)
   
   questions <- list()
   
   for (i in seq_len(nrow(codebook))) {
     row <- codebook[i, ]
     
-    field_name <- row[[field_name_col]]
-    
+    field_name <- redcap_chr(row[[field_name_col]])
+    if (!nzchar(field_name)) {
+      next
+    }
+
+    required_raw <- row[[required_col]]
     question <- list(
       id = field_name,
-      label = row[[field_label_col]] %||% field_name,
-      type = normalize_field_type(row[[field_type_col]]),
-      required = isTRUE(row[[required_col]]) || tolower(row[[required_col]]) == "yes",
-      choices = if (!is.null(row[[choices_col]])) parse_choices(row[[choices_col]]) else NULL
+      label = redcap_chr(row[[field_label_col]], field_name),
+      type = normalize_field_type(redcap_chr(row[[field_type_col]])),
+      required = isTRUE(required_raw) ||
+        tolower(redcap_chr(required_raw)) %in% c("yes", "y", "true", "1"),
+      choices = parse_choices(redcap_chr(row[[choices_col]]))
     )
-    
+
     questions[[field_name]] <- question
   }
   
@@ -265,31 +310,83 @@ normalize_field_type <- function(type) {
 #' @keywords internal
 generate_ui_code <- function(questions) {
   code <- character()
-  
+
   for (q_id in names(questions)) {
     q <- questions[[q_id]]
-    
-    func_name <- switch(q$type,
-      text = "nf_text_input",
-      textarea = "nf_textarea",
-      numeric = "nf_numeric_input",
-      select = "nf_select_input",
-      radio = "nf_radio_buttons",
-      checkbox = "nf_checkbox_group",
-      "nf_text_input"
+
+    # nf_question() is the only question constructor this package exports, so
+    # every generated line has to be a call to it. REDCap types that it cannot
+    # represent are emitted as comments rather than as calls that would fail
+    # the moment someone ran the generated script.
+    nf_type <- switch(q$type,
+      text = "text",
+      textarea = "text",
+      numeric = "numeric",
+      select = "select",
+      radio = "radio",
+      checkbox = "checkbox",
+      slider = "slider",
+      date = "date",
+      NA_character_
     )
-    
-    line <- sprintf('%s(id = "%s", label = "%s", required = %s)',
-                    func_name, q$id, q$label, q$required)
-    
-    code <- c(code, line)
+
+    if (is.na(nf_type)) {
+      code <- c(code, sprintf(
+        '# TODO: field "%s" has REDCap type "%s", which nf_question() does not\n# support. Handle it manually.',
+        q$id, q$type))
+      next
+    }
+
+    args <- sprintf('id = "%s", type = "%s", label = "%s"',
+                    q$id, nf_type, gsub('"', '\\\\"', q$label))
+
+    if (!is.null(q$choices) && length(q$choices) > 0) {
+      args <- paste0(args, ", choices = ", deparse_choices(q$choices))
+    }
+
+    args <- paste0(args, sprintf(", required = %s", if (isTRUE(q$required)) "TRUE" else "FALSE"))
+
+    code <- c(code, sprintf("nf_question(%s)", args))
   }
-  
-  cat(paste(code, collapse = ",\n\n"))
+
+  cat(paste(code, collapse = "\n\n"))
   invisible(code)
 }
 
 
+#' Coalesce Codebook Cells to a Single Non-Missing String
+#'
+#' Returns the first argument that is neither `NULL`, `NA`, nor a zero-length
+#' vector, coerced to a length-one character string. Falls back to `""` so
+#' callers can rely on `nzchar()` rather than guarding for `NA`.
+#'
+#' @param ... Candidate cell values, in priority order
+#' @return A length-one character vector, possibly `""`
+#' @keywords internal
+redcap_chr <- function(...) {
+  for (value in list(...)) {
+    if (is.null(value) || length(value) == 0) next
+    value <- value[[1]]
+    if (is.na(value)) next
+    return(as.character(value))
+  }
+  ""
+}
+
+
+#' Deparse a Named Choice Vector into R Source
+#'
+#' @param choices Named character vector of choice values (names are labels)
+#' @return A single string of R source for a `c(...)` call
+#' @keywords internal
+deparse_choices <- function(choices) {
+  labels <- names(choices)
+  if (is.null(labels)) {
+    return(paste0("c(", paste(sprintf('"%s"', choices), collapse = ", "), ")"))
+  }
+  paste0("c(", paste(sprintf('"%s" = "%s"', labels, choices), collapse = ", "), ")")
+}
+
+
 # Helper: null coalescing operator
-`%||%` <- function(a, b) if (is.null(a) || is.na(a) || nchar(a) == 0) b else a
 

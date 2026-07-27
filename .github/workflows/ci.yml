@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, fix/parse-errors]
+  pull_request:
+
+jobs:
+  r-package:
+    name: R package tests
+    runs-on: ubuntu-latest
+    container: rocker/r-ver:4.4.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: System dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends libpq-dev libxml2-dev
+      - name: Install package dependencies
+        run: install2.r --error DBI RPostgres jsonlite htmltools testthat
+      - name: Install nomadforms
+        run: R CMD INSTALL survey-runtime
+      - name: Run tests
+        run: Rscript -e 'testthat::test_dir("survey-runtime/tests/testthat", stop_on_failure = TRUE)'
+
+  r-cmd-check:
+    name: R CMD check (--as-cran)
+    runs-on: ubuntu-latest
+    container: rocker/r-ver:4.4.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: System dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            libpq-dev libxml2-dev libcurl4-openssl-dev libssl-dev qpdf pandoc
+      - name: Install package and check dependencies
+        run: |
+          install2.r --error DBI jsonlite htmltools \
+            RPostgres shiny haven openxlsx testthat roxygen2
+      - name: Regenerate documentation and fail if it is stale
+        run: |
+          Rscript -e 'roxygen2::roxygenise("survey-runtime")'
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if [ -n "$(git status --porcelain survey-runtime/man survey-runtime/NAMESPACE)" ]; then
+            echo "man/ or NAMESPACE is out of date; run roxygen2::roxygenise('survey-runtime')."
+            git --no-pager diff -- survey-runtime/man survey-runtime/NAMESPACE
+            exit 1
+          fi
+      - name: Build source tarball
+        run: R CMD build survey-runtime
+      - name: Check as CRAN
+        env:
+          _R_CHECK_CRAN_INCOMING_REMOTE_: "false"
+        run: R CMD check --as-cran --no-manual nomadforms_*.tar.gz
+      - name: Show check log on failure
+        if: failure()
+        run: cat nomadforms.Rcheck/00check.log || true
+
+  api-e2e:
+    name: API end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the stack
+        run: docker compose up -d --build
+      - name: Wait for the API to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/api/health && break
+            sleep 3
+          done
+      - name: Seed a survey and run the collect -> sync -> export flow
+        run: |
+          set -euo pipefail
+          SID=$(curl -sf -X POST http://localhost:8000/api/surveys \
+            -H 'Content-Type: application/json' \
+            -d '{"title":"CI Survey","questions":[{"id":"name","type":"text"}]}' \
+            | grep -o '"survey_id":"[^"]*"' | cut -d'"' -f4)
+          curl -sf -X POST http://localhost:8000/api/sync \
+            -H 'Content-Type: application/json' \
+            -d "{\"responses\":[{\"response_id\":\"11111111-1111-4111-8111-111111111111\",\"survey_id\":\"$SID\",\"session_id\":\"ci\",\"responses\":{\"name\":\"CI\"}}]}" \
+            | grep -q '"synced":1'
+          curl -sf "http://localhost:8000/api/surveys/$SID/export.csv" | grep -q '"name"'
+          echo "End-to-end flow passed."
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs

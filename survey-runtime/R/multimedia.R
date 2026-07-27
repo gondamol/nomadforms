@@ -19,6 +19,8 @@ NULL
 #'
 #' @return Shiny input
 #' @export
+#' @examples
+#' nf_image_upload("id_photo", "Upload a photo of your ID")
 nf_image_upload <- function(id, label, required = FALSE, 
                               accept = "image/*", max_size = 5,
                               capture = "environment", multiple = FALSE) {
@@ -108,6 +110,8 @@ nf_image_upload <- function(id, label, required = FALSE,
 #'
 #' @return Shiny input
 #' @export
+#' @examples
+#' nf_audio_record("interview_audio", "Record the interview response")
 nf_audio_record <- function(id, label, required = FALSE, max_duration = 300) {
   
   htmltools::tags$div(
@@ -251,6 +255,8 @@ nf_audio_record <- function(id, label, required = FALSE, max_duration = 300) {
 #'
 #' @return Shiny input
 #' @export
+#' @examples
+#' nf_video_record("consent_video", "Record verbal consent")
 nf_video_record <- function(id, label, required = FALSE, 
                               max_duration = 60, facing = "environment") {
   
@@ -314,6 +320,8 @@ nf_video_record <- function(id, label, required = FALSE,
 #'
 #' @return Shiny input
 #' @export
+#' @examples
+#' nf_file_upload("consent_form", "Upload signed consent form", accept = ".pdf,.doc,.docx")
 nf_file_upload <- function(id, label, required = FALSE,
                              accept = "*", max_size = 10, multiple = FALSE) {
   

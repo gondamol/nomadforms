@@ -13,6 +13,9 @@ NULL
 #'
 #' @return List with valid (TRUE/FALSE) and message
 #' @export
+#' @examples
+#' nf_validate("user@example.org", rules = list(required = TRUE, type = "email"))
+#' nf_validate("", rules = list(required = TRUE), question_label = "Name")
 nf_validate <- function(value, rules = list(), question_label = "This field") {
   errors <- character()
   
@@ -94,9 +97,9 @@ nf_validate <- function(value, rules = list(), question_label = "This field") {
   }
   
   # In list validation
-  if (!is.null(rules$in)) {
-    if (!all(value %in% rules$in)) {
-      errors <- c(errors, paste(question_label, "must be one of:", paste(rules$in, collapse = ", ")))
+  if (!is.null(rules$`in`)) {
+    if (!all(value %in% rules$`in`)) {
+      errors <- c(errors, paste(question_label, "must be one of:", paste(rules$`in`, collapse = ", ")))
     }
   }
   
@@ -126,6 +129,9 @@ nf_validate <- function(value, rules = list(), question_label = "This field") {
 #' @param email Email address
 #' @return Logical
 #' @export
+#' @examples
+#' nf_validate_email("user@example.org")
+#' nf_validate_email("not-an-email")
 nf_validate_email <- function(email) {
   pattern <- "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
   grepl(pattern, email)
@@ -136,6 +142,9 @@ nf_validate_email <- function(email) {
 #' @param url URL string
 #' @return Logical
 #' @export
+#' @examples
+#' nf_validate_url("https://example.org/survey")
+#' nf_validate_url("not a url")
 nf_validate_url <- function(url) {
   pattern <- "^https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?$"
   grepl(pattern, url)
@@ -146,6 +155,9 @@ nf_validate_url <- function(url) {
 #' @param date Date string
 #' @return Logical
 #' @export
+#' @examples
+#' nf_validate_date("2026-07-26")
+#' nf_validate_date("not-a-date")
 nf_validate_date <- function(date) {
   tryCatch({
     as.Date(date)
@@ -160,6 +172,9 @@ nf_validate_date <- function(date) {
 #' @param phone Phone number string
 #' @return Logical
 #' @export
+#' @examples
+#' nf_validate_phone("+254712345678")
+#' nf_validate_phone("abc")
 nf_validate_phone <- function(phone) {
   # International format: +1234567890 or local formats
   pattern <- "^\\+?[1-9]\\d{1,14}$|^\\(?\\d{3}\\)?[-\\s]?\\d{3}[-\\s]?\\d{4}$"
@@ -177,6 +192,13 @@ nf_validate_phone <- function(phone) {
 #'
 #' @return List with valid (TRUE/FALSE), errors list, and summary
 #' @export
+#' @examples
+#' responses <- list(email = "user@example.org", age = 15)
+#' rules <- list(
+#'   email = list(required = TRUE, type = "email"),
+#'   age = list(required = TRUE, min = 18)
+#' )
+#' nf_validate_batch(responses, rules)
 nf_validate_batch <- function(responses, rules, labels = NULL) {
   results <- list()
   all_errors <- list()
@@ -218,6 +240,10 @@ nf_validate_batch <- function(responses, rules, labels = NULL) {
 #'
 #' @return List with valid (TRUE/FALSE) and errors
 #' @export
+#' @examples
+#' responses <- list(password = "abc123", password_confirm = "abc123")
+#' rules <- list(list(type = "match", field1 = "password", field2 = "password_confirm"))
+#' nf_validate_cross_field(responses, rules)
 nf_validate_cross_field <- function(responses, rules) {
   errors <- character()
   
@@ -266,5 +292,4 @@ nf_validate_cross_field <- function(responses, rules) {
 }
 
 # Helper: null coalescing operator
-`%||%` <- function(a, b) if (is.null(a)) b else a
 

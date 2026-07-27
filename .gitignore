@@ -72,3 +72,8 @@ temp/
 package-lock.json
 yarn.lock
 
+
+# Build artifacts
+dist/
+*.tar.gz
+*.Rcheck/

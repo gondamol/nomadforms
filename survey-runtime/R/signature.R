@@ -20,6 +20,8 @@ NULL
 #'
 #' @return Shiny input
 #' @export
+#' @examples
+#' nf_signature("consent_signature", "Please sign to confirm consent")
 nf_signature <- function(id, label, required = FALSE,
                           width = 500, height = 200,
                           pen_color = "#000000", pen_width = 2,
@@ -218,6 +220,8 @@ nf_signature <- function(id, label, required = FALSE,
 #'
 #' @return Shiny input
 #' @export
+#' @examples
+#' nf_initials("consent_initials", "Initial each page")
 nf_initials <- function(id, label, required = FALSE) {
   nf_signature(
     id = id,

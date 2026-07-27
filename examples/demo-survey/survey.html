@@ -277,20 +277,26 @@ observeEvent(input$submit, {
   
   # Validate required fields
   validations <- list(
-    name = nf_validate(input$name, required = TRUE, type = "text"),
-    age = nf_validate(input$age, required = TRUE, type = "numeric", min = 0, max = 120),
-    gender = nf_validate(input$gender, required = TRUE, type = "radio"),
-    country = nf_validate(input$country, required = TRUE, type = "select"),
-    residence = nf_validate(input$residence, required = TRUE, type = "radio")
+    name = nf_validate(input$name, rules = list(required = TRUE, type = "text"),
+                       question_label = "Name"),
+    age = nf_validate(input$age,
+                      rules = list(required = TRUE, type = "numeric", min = 0, max = 120),
+                      question_label = "Age"),
+    gender = nf_validate(input$gender, rules = list(required = TRUE),
+                         question_label = "Gender"),
+    country = nf_validate(input$country, rules = list(required = TRUE),
+                          question_label = "Country"),
+    residence = nf_validate(input$residence, rules = list(required = TRUE),
+                            question_label = "Residence")
   )
-  
+
   # Check for validation errors
   errors <- sapply(validations, function(v) !v$valid)
-  
+
   if (any(errors)) {
     error_fields <- names(errors)[errors]
-    error_messages <- sapply(validations[errors], function(v) v$message)
-    
+    error_messages <- unlist(lapply(validations[errors], function(v) v$errors[[1]]))
+
     showNotification(
       paste("Please fix the following:", paste(error_messages, collapse = ", ")),
       type = "error",
